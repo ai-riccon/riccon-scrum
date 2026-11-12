@@ -32,6 +32,10 @@ export async function removeWorktree(repoPath: string, worktreePath: string): Pr
   await git(repoPath, 'worktree', 'remove', '--force', worktreePath);
 }
 
+export async function pruneWorktrees(repoPath: string): Promise<void> {
+  await git(repoPath, 'worktree', 'prune');
+}
+
 export async function createDetachedWorktree(repoPath: string, worktreePath: string, baseBranch: string): Promise<void> {
   await git(repoPath, 'worktree', 'add', '--detach', worktreePath, baseBranch);
 }

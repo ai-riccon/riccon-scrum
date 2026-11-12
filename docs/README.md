@@ -1,0 +1,53 @@
+# riccon·scrum 文档
+
+本目录是产品的正式设计与需求基线，代码实现应与文档保持一致；行为变更时先改文档再改代码。
+
+| 文档 | 内容 | 状态 |
+| --- | --- | --- |
+| [product-design.md](./product-design.md) | 产品定位、角色、流程、状态机、架构、数据模型、API、安全边界 | 现状基线 |
+| [requirements.md](./requirements.md) | 带编号的功能/非功能需求、验收标准、实现证据与追踪 | 现状基线 + 规划项 |
+| [discovery-track.md](./discovery-track.md) | 需求发现轨道：对话澄清、AI 拆分草案、人工决策、版本化修订、依赖/分类/标签、批准物化与 Handoff | P0/P1/P2 已实现并验证 |
+| [task-execution.md](./task-execution.md) | Story Task 执行轨道：任务拆解、依赖 DAG、上下文包、调度/恢复、并行与关键路径 | P0/P1/P2 已实现并验证 |
+| [feedback-track.md](./feedback-track.md) | 反馈轨道：需求迭代 ChangeRequest、故事 BugReport、分诊、修复故事、回归验证、SLA 与度量 | P0/P1/P2 已实现并验证 |
+| [document-track.md](./document-track.md) | 项目文档轨道：文档分类、需求文档规范、生成/自动更新、docs 同步与分阶段上下文 | P0/P1/P2 已实现并验证 |
+
+## 阅读顺序
+
+1. 先读 `product-design.md` 了解系统现在能做什么、怎么运转。
+2. 再用 `requirements.md` 核对每条需求的实现状态与代码位置。
+3. 新需求（需求发现轨道）见 `discovery-track.md`，其中的 `D-xxx` 编号与 `requirements.md` 的 `REQ-DISC-xxx` 对应。
+4. Story 内部 Task 拆解、依赖排序与执行上下文见 `task-execution.md`，对应 `requirements.md` 的 `REQ-TASK-xxx`。
+5. 需求迭代与 Bug 反馈见 `feedback-track.md`，对应 `requirements.md` 的 `REQ-FB-xxx`。
+6. 项目文档中心、文档生成与 docs 同步见 `document-track.md`，对应 `requirements.md` 的 `REQ-DOC-xxx`。
+
+## 维护规则
+
+- 需求编号一经分配不复用；废弃需求标记为“废弃”并保留原因。
+- 每条已实现需求必须能指向代码或可复现验证，避免“文档宣称”。
+- 规划中的能力必须明确标注“计划中”，不得与现状混写。
+- 影响架构、安全边界或数据模型的变更，先在本目录补充设计，再进入实现。
+
+## 最近更新（2026-11-12）
+
+- 需求工作台支持对话式 intake、AI 拆分草案预览/逐项确认、需求 3 层父子层级。
+- 需求/故事统一分类（最多 3 级）与标签；列表、看板、依赖图均可筛选。
+- 需求与故事依赖统一为 Finish-to-Start DAG；故事启动门禁 + 原因 override 审计；前置需求按故事全部完成判定交付。
+- 故事完成自动生成结构化 Handoff（diff/关键文件/契约/迁移/DoD/AC/决策），并注入后续生成上下文。
+- 图视图支持 DAG、关键路径、Mermaid 导出、活动图（开始/结束）与需求范围用例图。
+- AI 分类/标签弹窗先展示现有词表，人工点击“AI 重新生成”后才生成建议，确认后才应用；草稿分类/标签建议在批准时自动应用。
+- 需求/故事混合检索接入全局搜索（词法回退 + 可选 embedding 后端），embedding 地址/模型/API Key 可在设置页配置，结果可直接打开详情。
+- AI 依赖建议：基于语义候选生成前置/后续、理由与置信度，人工勾选后才建边；过滤自依赖、重复与循环。
+- 依赖 chip / 图节点可点击弹出事项详情（状态、分类标签、摘要、依赖、Handoff），并可打开完整详情。
+- Story 内部支持 AI Task 规划：2–8 个 Task、依赖 DAG、AC 映射、拓扑调度与任务级证据；规划失败自动降级单 Task。
+- 任务上下文按预算注入当前 Task/AC、上游 Task、故事/需求依赖 Handoff、当前需求、项目画像/架构/术语表、代码索引与知识库。
+- Task 支持编辑、计划审批（never/risky/always）、失败重试/阻塞/恢复、跳过审计、任务度量与自适应重规划。
+- P2 支持无依赖、文件不冲突的 Task 在独立 worktree 并行执行并串行合并；关键路径与 Task token 归因可见。
+- 已批准需求支持迭代反馈/变更单：基线不可变、影响分析、人工决策、增量/修订派生需求。
+- 已交付故事支持 Bug 反馈：分诊、重复候选、修复故事与回归 AC；修复验收后 fixed，人工验证后 closed。
+- 支持外部来源字段、迭代标签、Bug SLA/逾期、变更与 Bug 度量。
+- 项目档案升级为项目文档中心：10 类文档分类、版本/章节、AI/确定性生成、过期检测、人工发布/锁定/回滚、缺失类型生成。
+- 已批准需求确定性落入规范需求文档与索引；老项目入驻生成“代码推断”需求基线。
+- 文档可预览并同步到 `docs/riccon/`，检测外部修改冲突，支持 force；不自动 commit。
+- 需求/规划/执行/QA 阶段按权重注入文档地图与章节，带版本、引用、stale 降权与预算裁剪。
+- 文档一致性检查覆盖需求↔故事、代码图谱↔入口、API↔路由、DB↔迁移；变更单展示受影响文档。
+- 验证：typecheck、Web build、`npm run check:documents`、文档管道 API E2E 与 DocsPage Playwright 8 项断言均通过。

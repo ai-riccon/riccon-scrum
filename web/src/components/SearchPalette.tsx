@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { CodeSearchResult, Project } from '@acp-scrum/shared';
+import type { CodeSearchResult, EntitySearchResult, Project } from '@riccon-scrum/shared';
 import { api } from '../api';
 import { Icon, type IconName } from '../icons';
 
@@ -9,9 +9,20 @@ const KIND_META: Record<CodeSearchResult['kind'], { icon: IconName; color: strin
   content: { icon: 'terminal', color: 'var(--text-low)', label: '内容' },
 };
 
-export function SearchPalette({ project, onClose }: { project: Project; onClose: () => void }) {
+export function SearchPalette({
+  project,
+  onClose,
+  onOpenStory,
+  onOpenRequirement,
+}: {
+  project: Project;
+  onClose: () => void;
+  onOpenStory?: (id: string) => void;
+  onOpenRequirement?: (id: string) => void;
+}) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CodeSearchResult[]>([]);
+  const [entities, setEntities] = useState<EntitySearchResult>({ mode: 'lexical', hits: [] });
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<{ files: number; symbols: number } | null>(null);
   const [active, setActive] = useState(0);
@@ -26,9 +37,14 @@ export function SearchPalette({ project, onClose }: { project: Project; onClose:
     (q: string) => {
       if (!q.trim()) {
         setResults([]);
+        setEntities({ mode: 'lexical', hits: [] });
         return;
       }
       setLoading(true);
+      api
+        .searchEntities(project.id, q)
+        .then(setEntities)
+        .catch(() => setEntities({ mode: 'lexical', hits: [] }));
       api
         .search(project.id, q)
         .then((r) => {
@@ -77,7 +93,7 @@ export function SearchPalette({ project, onClose }: { project: Project; onClose:
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索符号、文件、代码内容…"
+            placeholder="搜索需求、故事、符号、代码…"
             aria-label="代码搜索"
           />
           {loading && <Icon name="refresh" size={15} className="spin" style={{ color: 'var(--text-low)' }} />}
@@ -93,7 +109,40 @@ export function SearchPalette({ project, onClose }: { project: Project; onClose:
               {stats ? `已索引 ${stats.files} 文件 · ${stats.symbols} 符号。输入关键词开始搜索。` : '输入关键词搜索代码库。'}
             </div>
           )}
-          {query.trim() !== '' && results.length === 0 && !loading && <div className="search-hint">无匹配结果</div>}
+          {query.trim() !== '' && entities.hits.length > 0 && (
+            <div className="search-section-label">
+              需求 / 故事 · {entities.mode === 'hybrid' ? '语义检索' : '关键词检索'}
+            </div>
+          )}
+          {entities.hits.map((hit) => (
+            <button
+              className="search-result entity-hit"
+              key={`${hit.type}-${hit.id}`}
+              onClick={() => {
+                if (hit.type === 'story') onOpenStory?.(hit.id);
+                else onOpenRequirement?.(hit.id);
+              }}
+            >
+              <span className="sr-ico" style={{ color: hit.type === 'story' ? 'var(--indigo-bright)' : 'var(--cyan)', background: 'var(--surface-1)' }}>
+                <Icon name={hit.type === 'story' ? 'file' : 'sparkles'} size={13} />
+              </span>
+              <div className="sr-body">
+                <div className="sr-name">
+                  {hit.title}
+                  <span className="badge" style={{ marginLeft: 6 }}>{hit.status}</span>
+                  {hit.tags.slice(0, 2).map((tag) => (
+                    <span className="badge cyan" style={{ marginLeft: 4 }} key={tag}>{tag}</span>
+                  ))}
+                </div>
+                <div className="sr-path">{hit.snippet}</div>
+              </div>
+              <span className="sr-kind">{hit.type === 'story' ? '故事' : '需求'} · {Math.round(hit.score * 100)}</span>
+            </button>
+          ))}
+          {query.trim() !== '' && results.length === 0 && entities.hits.length === 0 && !loading && (
+            <div className="search-hint">无匹配结果</div>
+          )}
+          {results.length > 0 && <div className="search-section-label">代码</div>}
           {results.map((r, i) => {
             const m = KIND_META[r.kind];
             return (

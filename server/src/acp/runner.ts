@@ -3,7 +3,7 @@ import { Readable, Writable } from 'node:stream';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
-import type { EventPayload } from '@acp-scrum/shared';
+import type { EventPayload } from '@riccon-scrum/shared';
 import { TerminalManager } from './terminal';
 import type { AgentSpec } from './agents';
 
@@ -23,6 +23,7 @@ export interface RunnerOptions {
   spec: AgentSpec;
   host: RunnerHost;
   allowedRoots: string[];
+  model?: string;
 }
 
 function textOf(content: acp.ContentBlock): string {
@@ -105,6 +106,10 @@ export class AcpRunner {
     return this.child?.pid ?? null;
   }
 
+  get alive(): boolean {
+    return !this.stopped && this.child !== null && this.child.exitCode === null;
+  }
+
   get sessionId(): string | null {
     return this.acpSessionId;
   }
@@ -125,7 +130,7 @@ export class AcpRunner {
 
   private buildApp(): acp.ClientApp {
     const { host, storyId, sessionId } = this.opts;
-    const app = acp.client({ name: 'acp-scrum' });
+    const app = acp.client({ name: 'riccon-scrum' });
 
     app.onRequest(acp.methods.client.fs.readTextFile, async ({ params }) => {
       const target = this.assertInScope(params.path);
@@ -167,11 +172,14 @@ export class AcpRunner {
 
   async start(resumeSessionId?: string): Promise<void> {
     const { host, storyId, sessionId, cwd, spec } = this.opts;
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    for (const key of spec.envUnset ?? []) delete env[key];
+    Object.assign(env, spec.env);
     const child = spawn(spec.command, spec.args, {
       cwd,
       shell: false,
       windowsHide: true,
-      env: { ...process.env, ...spec.env },
+      env,
     });
     this.child = child;
     if (!child.stdin || !child.stdout) throw new Error('agent process has no stdio');
@@ -179,6 +187,19 @@ export class AcpRunner {
     child.stderr?.on('data', (d: Buffer) => {
       const line = d.toString('utf8').trim();
       if (line) host.publish(storyId, { type: 'agent.message', sessionId, role: 'thought', text: `[stderr] ${line}` });
+    });
+    child.once('error', (err) => {
+      try {
+        this.connection?.close();
+      } catch {
+        // already closed
+      }
+      host.publish(storyId, {
+        type: 'session.status',
+        sessionId,
+        status: 'error',
+        detail: `进程启动失败：${err.message}`,
+      });
     });
     child.on('exit', (code) => {
       if (!this.stopped) {
@@ -200,7 +221,7 @@ export class AcpRunner {
     await ctx.request(acp.methods.agent.initialize, {
       protocolVersion: acp.PROTOCOL_VERSION,
       clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: true },
-      clientInfo: { name: 'acp-scrum', version: '0.0.1' },
+      clientInfo: { name: 'riccon-scrum', version: '0.0.1' },
     });
 
     if (resumeSessionId) {
@@ -211,6 +232,22 @@ export class AcpRunner {
     } else {
       const resp = await ctx.request(acp.methods.agent.session.new, { cwd, mcpServers: [] });
       this.acpSessionId = resp.sessionId;
+    }
+    if (spec.modelConfigId && this.opts.model) {
+      try {
+        await ctx.request(acp.methods.agent.session.setConfigOption, {
+          sessionId: this.acpSessionId,
+          configId: spec.modelConfigId,
+          value: this.opts.model,
+        });
+      } catch (err) {
+        host.publish(storyId, {
+          type: 'agent.message',
+          sessionId,
+          role: 'thought',
+          text: `[平台] 模型钉住失败（${this.opts.model}）：${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
     }
     host.publish(storyId, { type: 'session.status', sessionId, status: 'running' });
   }

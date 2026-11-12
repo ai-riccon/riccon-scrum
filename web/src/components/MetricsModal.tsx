@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { FlowMetrics, Project } from '@acp-scrum/shared';
+import type { FlowMetrics, Project, QualityMetrics } from '@riccon-scrum/shared';
 import { api } from '../api';
 import { Icon, type IconName } from '../icons';
 
@@ -31,8 +31,10 @@ function MetricCard({ icon, label, value, color, sub }: { icon: IconName; label:
 
 export function MetricsModal({ project, onClose }: { project: Project; onClose: () => void }) {
   const [m, setM] = useState<FlowMetrics | null>(null);
+  const [quality, setQuality] = useState<QualityMetrics | null>(null);
   useEffect(() => {
     api.metrics(project.id).then(setM).catch(() => undefined);
+    api.qualityMetrics(project.id).then(setQuality).catch(() => undefined);
   }, [project.id]);
 
   const total = m ? m.done + m.inProgress + m.blocked : 0;
@@ -62,6 +64,19 @@ export function MetricsModal({ project, onClose }: { project: Project; onClose: 
                 <MetricCard icon="clock" label="平均 Cycle Time" value={fmtDuration(m.avgCycleTimeMs)} color="var(--magenta)" sub="就绪 → 完成" />
                 <MetricCard icon="shield" label="变更失败率" value={fmtRate(m.changeFailRate)} color="var(--amber)" sub="曾阻塞 / 已结束" />
               </div>
+
+              {quality && (
+                <>
+                  <div className="section-label" style={{ marginTop: 20 }}>质量与成本</div>
+                  <div className="metric-grid">
+                    <MetricCard icon="check" label="一次验收通过率" value={fmtRate(quality.firstPassAcceptanceRate)} color="var(--green)" sub={`${quality.acceptedWithoutRework}/${quality.accepted} 个已接受故事`} />
+                    <MetricCard icon="clock" label="平均人工评审耗时" value={fmtDuration(quality.avgReviewMs)} color="var(--amber)" sub="进入 Review → Done" />
+                    <MetricCard icon="activity" label="每接受故事 tokens" value={quality.avgTokensPerAccepted == null ? '—' : Math.round(quality.avgTokensPerAccepted).toLocaleString()} color="var(--cyan)" />
+                    <MetricCard icon="layers" label="已接受故事 tokens" value={quality.totalTokens.toLocaleString()} color="var(--indigo-bright)" />
+                    <MetricCard icon="refresh" label="返工次数" value={String(quality.reworkCount)} color="var(--red)" />
+                  </div>
+                </>
+              )}
 
               <div className="section-label" style={{ marginTop: 20 }}>状态分布</div>
               <div className="dist-bar">

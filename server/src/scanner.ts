@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { ProjectProfile } from '@acp-scrum/shared';
+import type { ProjectProfile } from '@riccon-scrum/shared';
 
 async function exists(p: string): Promise<boolean> {
   try {

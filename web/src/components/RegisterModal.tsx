@@ -51,6 +51,7 @@ export function RegisterModal({
             <div className="seg">
               <button className={agentKind === 'opencode' ? 'on' : ''} onClick={() => setAgentKind('opencode')}>opencode</button>
               <button className={agentKind === 'claude-code' ? 'on' : ''} onClick={() => setAgentKind('claude-code')}>Claude Code</button>
+              <button className={agentKind === 'qoder-cli' ? 'on' : ''} onClick={() => setAgentKind('qoder-cli')}>Qoder CLI</button>
             </div>
           </div>
           <div className="field">

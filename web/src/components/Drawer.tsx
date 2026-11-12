@@ -1,10 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AgentSession, EventRow, TeamRun } from '@acp-scrum/shared';
+import type {
+  AgentSession,
+  Category,
+  EventRow,
+  Handoff,
+  Project,
+  Release,
+  StoryDependencyInfo,
+  Tag,
+  TeamRun,
+} from '@riccon-scrum/shared';
 import { api, type BoardStory } from '../api';
 import { Icon } from '../icons';
 import { PHASE_META, PHASE_ORDER, ROLE_META, STATUS_META, StatusTag, coalesceEvents, timeOf } from '../ui';
+import { CategorySelect } from './CategoryPicker';
+import { DependencyPeekModal, type DependencyPeekTarget } from './DependencyPeekModal';
+import { DependencySuggestModal } from './DependencySuggestModal';
+import { TagEditor } from './TagPicker';
+import { TaskTab } from './TaskTab';
+import { BugReportModal } from './BugReportModal';
 
-type Tab = 'overview' | 'live' | 'dod' | 'diff' | 'team';
+type Tab = 'overview' | 'live' | 'tasks' | 'dod' | 'diff' | 'team';
 
 function DiffView({ diff }: { diff: string }) {
   if (!diff.trim()) return <div className="rail-empty">暂无差异（agent 尚未产生改动）</div>;
@@ -137,7 +153,7 @@ function TeamTab({ run, sessions }: { run: TeamRun | null; sessions: AgentSessio
               <Icon name={m.icon} size={12} />
               {m.label}
             </span>
-            <span className="role-kind">{s.agentKind}</span>
+            <span className="role-kind">{s.agentKind}{s.model ? ` · ${s.model}` : ''}</span>
             <span className={`badge ${s.status === 'running' ? 'cyan' : s.status === 'error' ? 'red' : ''}`} style={{ marginLeft: 'auto' }}>{s.status}</span>
           </div>
         );
@@ -148,32 +164,204 @@ function TeamTab({ run, sessions }: { run: TeamRun | null; sessions: AgentSessio
 
 export function Drawer({
   story,
+  project,
   events,
   busy,
+  categories,
+  tags,
+  allStories,
   onClose,
   onAction,
+  onRework,
   onResume,
+  onToast,
+  onChanged,
+  onTagsChanged,
+  onOpenStory,
 }: {
   story: BoardStory;
+  project: Project;
   events: EventRow[];
   busy: boolean;
+  categories: Category[];
+  tags: Tag[];
+  allStories: BoardStory[];
   onClose: () => void;
   onAction: (a: 'approve' | 'start' | 'rework' | 'accept') => void;
+  onRework: (reason: string) => Promise<void>;
   onResume: (message: string) => void;
+  onToast: (kind: 'success' | 'error' | 'info', text: string) => void;
+  onChanged: () => Promise<void>;
+  onTagsChanged?: () => Promise<void>;
+  onOpenStory?: (id: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>('overview');
-  const [diff, setDiff] = useState<string>('');
+  const [diff, setDiff] = useState<{ diff: string; files: { path: string; added: number; removed: number; risk: 'high' | 'medium' | 'low' }[]; risk: 'high' | 'medium' | 'low' }>({
+    diff: '',
+    files: [],
+    risk: 'low',
+  });
   const [resumeMsg, setResumeMsg] = useState('');
+  const [reworkReason, setReworkReason] = useState('');
+  const [acFeedback, setAcFeedback] = useState('');
   const [team, setTeam] = useState<{ run: TeamRun | null; sessions: AgentSession[] }>({ run: null, sessions: [] });
+  const [release, setRelease] = useState<Release | null>(null);
+  const [releasing, setReleasing] = useState<'release' | 'rollback' | null>(null);
+  const [deps, setDeps] = useState<StoryDependencyInfo | null>(null);
+  const [handoff, setHandoff] = useState<Handoff | null>(null);
+  const [depCandidate, setDepCandidate] = useState('');
+  const [depBusy, setDepBusy] = useState<string | null>(null);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [categoryBusy, setCategoryBusy] = useState(false);
+  const [peek, setPeek] = useState<DependencyPeekTarget | null>(null);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [bugOpen, setBugOpen] = useState(false);
   const storyEvents = useMemo(() => events.filter((e) => e.storyId === story.id), [events, story.id]);
+  const lastEventSeq = events[events.length - 1]?.seq ?? 0;
 
   useEffect(() => {
-    if (tab === 'diff') api.storyDiff(story.id).then((r) => setDiff(r.diff)).catch(() => setDiff(''));
+    if (tab === 'diff') api.storyDiff(story.id).then(setDiff).catch(() => undefined);
   }, [tab, story.id, story.status]);
 
   useEffect(() => {
     if (tab === 'team') api.team(story.id).then(setTeam).catch(() => undefined);
-  }, [tab, story.id, story.status, events.length]);
+  }, [tab, story.id, story.status, lastEventSeq]);
+
+  useEffect(() => {
+    if (story.status !== 'done') {
+      setRelease(null);
+      setHandoff(null);
+      return;
+    }
+    api.releaseStatus(story.id).then(setRelease).catch(() => undefined);
+    api.storyHandoff(story.id).then(setHandoff).catch(() => undefined);
+  }, [story.id, story.status, lastEventSeq]);
+
+  const refreshDeps = () => api.storyDependencies(story.id).then(setDeps).catch(() => undefined);
+
+  useEffect(() => {
+    void refreshDeps();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [story.id, story.status, lastEventSeq]);
+
+  const addPredecessor = async () => {
+    if (!depCandidate) return;
+    setDepBusy('add');
+    try {
+      await api.createDependency({
+        projectId: story.projectId,
+        predecessorType: 'story',
+        predecessorId: depCandidate,
+        successorType: 'story',
+        successorId: story.id,
+      });
+      setDepCandidate('');
+      await refreshDeps();
+      onToast('success', '前置故事已添加');
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : String(err));
+    } finally {
+      setDepBusy(null);
+    }
+  };
+
+  const removeDependency = async (id: string) => {
+    setDepBusy(id);
+    try {
+      await api.deleteDependency(id);
+      await refreshDeps();
+      onToast('info', '依赖已移除');
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : String(err));
+    } finally {
+      setDepBusy(null);
+    }
+  };
+
+  const forceStart = async () => {
+    if (!overrideReason.trim()) {
+      onToast('error', '请填写强制开始原因');
+      return;
+    }
+    setDepBusy('override');
+    try {
+      await api.forceStartStory(story.id, overrideReason.trim());
+      setOverrideReason('');
+      onToast('success', '已强制启动，已记录越权原因');
+      await onChanged();
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : String(err));
+    } finally {
+      setDepBusy(null);
+    }
+  };
+
+  const changeCategory = async (categoryId: string | null) => {
+    setCategoryBusy(true);
+    try {
+      await api.setStoryCategory(story.id, categoryId);
+      await onChanged();
+      onToast('success', '故事分类已更新');
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : String(err));
+    } finally {
+      setCategoryBusy(false);
+    }
+  };
+
+  const changeTags = async (next: Tag[]) => {
+    try {
+      await api.setStoryTags(story.id, next.map((tag) => tag.id));
+      await onChanged();
+      onToast('success', '故事标签已更新');
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const createTag = async (name: string): Promise<Tag | null> => {
+    try {
+      const tag = await api.createTag({ projectId: project.id, name });
+      await onTagsChanged?.();
+      return tag;
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : String(err));
+      return null;
+    }
+  };
+
+  const dependencyTargets = useMemo(() => {
+    const existing = new Set((deps?.predecessors ?? []).map((item) => item.id));
+    return allStories.filter((item) => item.id !== story.id && !existing.has(item.id));
+  }, [allStories, story.id, deps]);
+
+  const depName = (id: string) => allStories.find((item) => item.id === id)?.title ?? id;
+
+  const doRelease = async () => {
+    setReleasing('release');
+    try {
+      const result = await api.release(story.id);
+      setRelease(result);
+      onToast(result.status === 'succeeded' ? 'success' : 'error', result.status === 'succeeded' ? '发布成功' : '发布失败，查看输出');
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : String(err));
+    } finally {
+      setReleasing(null);
+    }
+  };
+
+  const doRollback = async () => {
+    setReleasing('rollback');
+    try {
+      const result = await api.rollback(story.id);
+      setRelease(result);
+      onToast(result.status === 'rolled_back' ? 'success' : 'error', result.status === 'rolled_back' ? '回滚成功' : '回滚失败，查看输出');
+    } catch (err) {
+      onToast('error', err instanceof Error ? err.message : String(err));
+    } finally {
+      setReleasing(null);
+    }
+  };
 
   const m = STATUS_META[story.status];
   const passCount = story.dod.filter((d) => d.command && d.status === 'pass').length;
@@ -206,6 +394,16 @@ export function Drawer({
               <Icon name="clock" size={11} />
               {timeOf(story.createdAt)}
             </span>
+            <CategorySelect
+              categories={categories}
+              value={story.categoryId}
+              onChange={changeCategory}
+              disabled={categoryBusy}
+            />
+            <button className="btn small ghost" onClick={() => setBugOpen(true)}>
+              <Icon name="alert" size={12} />
+              反馈 Bug
+            </button>
           </div>
         </div>
 
@@ -213,10 +411,11 @@ export function Drawer({
           {([
             ['overview', '概览', 'file'],
             ['live', '实时', 'activity'],
+            ['tasks', '任务', 'list'],
             ['team', '团队', 'layers'],
             ['dod', 'DoD', 'clipboard'],
             ['diff', 'Diff', 'code'],
-          ] as [Tab, string, 'file' | 'activity' | 'layers' | 'clipboard' | 'code'][]).map(([id, label, icon]) => (
+          ] as [Tab, string, 'file' | 'activity' | 'list' | 'layers' | 'clipboard' | 'code'][]).map(([id, label, icon]) => (
             <button key={id} className={`tab ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <Icon name={icon} size={13} />
@@ -230,15 +429,207 @@ export function Drawer({
         <div className="drawer-body">
           {tab === 'overview' && (
             <>
-              <div className="section-label">故事描述</div>
+              <div className="section-label">标签</div>
+              <TagEditor
+                allTags={tags}
+                selected={story.tags ?? []}
+                onChange={(next) => void changeTags(next)}
+                onCreate={createTag}
+              />
+              <div className="section-label" style={{ marginTop: 20 }}>故事描述</div>
               <p className="prose">{story.description || '（无描述）'}</p>
               <div className="section-label" style={{ marginTop: 20 }}>验收标准 · BDD</div>
               <div className="bdd">{story.acceptanceCriteria || '（未提供）'}</div>
+
+              <div className="section-label" style={{ marginTop: 20 }}>依赖关系</div>
+              {deps?.blockedBy.length ? (
+                <div className="req-note warn">
+                  等待前置：{deps.blockedBy.map((item) => item.title).join('；')}
+                </div>
+              ) : (
+                <div className="req-note ok">前置已满足或未设置前置。</div>
+              )}
+              <div className="dep-editor">
+                <div className="dep-group">
+                  <span className="dep-label">前置故事</span>
+                  {deps?.predecessors.length === 0 && <span className="hint">暂无</span>}
+                  {deps?.predecessors.map((item) => (
+                    <span
+                      className={`dep-chip clickable ${item.status === 'done' ? 'done' : ''}`}
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setPeek({ type: 'story', id: item.id, title: item.title, status: item.status })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') setPeek({ type: 'story', id: item.id, title: item.title, status: item.status });
+                      }}
+                    >
+                      <Icon name={item.status === 'done' ? 'check' : 'clock'} size={11} />
+                      {depName(item.id)}
+                      <button
+                        className="dep-remove"
+                        aria-label={`移除前置 ${depName(item.id)}`}
+                        disabled={depBusy === item.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void removeDependency(item.id);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="dep-group">
+                  <span className="dep-label">后续故事</span>
+                  {deps?.successors.length === 0 && <span className="hint">暂无</span>}
+                  {deps?.successors.map((item) => (
+                    <span
+                      className="dep-chip clickable"
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setPeek({ type: 'story', id: item.id, title: item.title, status: item.status })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') setPeek({ type: 'story', id: item.id, title: item.title, status: item.status });
+                      }}
+                    >
+                      {item.title}
+                    </span>
+                  ))}
+                </div>
+                <div className="dep-add">
+                  <select value={depCandidate} onChange={(e) => setDepCandidate(e.target.value)} aria-label="添加上游故事">
+                    <option value="">添加上游故事…</option>
+                    {dependencyTargets.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        [{item.status}] {item.title}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="btn small" disabled={!depCandidate || depBusy === 'add'} onClick={addPredecessor}>
+                    <Icon name="plus" size={12} />
+                    添加
+                  </button>
+                  <button className="btn small ghost" disabled={depBusy !== null} onClick={() => setSuggestOpen(true)}>
+                    <Icon name="sparkles" size={12} />
+                    AI 建议依赖
+                  </button>
+                </div>
+              </div>
+
+              {story.status === 'ready' && deps?.blockedBy.length ? (
+                <div className="dep-override">
+                  <div className="req-note warn">前置未完成，直接启动会被门禁拦截。</div>
+                  <input
+                    value={overrideReason}
+                    onChange={(e) => setOverrideReason(e.target.value)}
+                    placeholder="强制开始原因（必填，会记录审计事件）"
+                  />
+                  <button className="btn small amber" disabled={depBusy === 'override' || !overrideReason.trim()} onClick={forceStart}>
+                    <Icon name="play" size={12} />
+                    强制开始
+                  </button>
+                </div>
+              ) : null}
+              {story.status === 'done' && handoff && (
+                <div className="handoff-box">
+                  <div className="section-label">交付物 Handoff</div>
+                  <div className="req-note">{handoff.summary}</div>
+                  {handoff.files.length > 0 && (
+                    <div className="handoff-files">
+                      {handoff.files.slice(0, 10).map((file) => (
+                        <span className="chip" key={file.path}>
+                          {file.path} <em>+{file.added}/-{file.removed}</em>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {handoff.contracts && <div className="req-note">契约：{handoff.contracts}</div>}
+                  {handoff.migrations.length > 0 && <div className="req-note">迁移：{handoff.migrations.join('、')}</div>}
+                  {handoff.dod.length > 0 && <div className="req-note">测试/门禁：{handoff.dod.join('；')}</div>}
+                  {handoff.decisions.length > 0 && <div className="req-note">决策：{handoff.decisions.join('；')}</div>}
+                </div>
+              )}
+              {story.status === 'done' && (
+                <div className="release-box">
+                  <div className="section-label">发布</div>
+                  <div className="release-status">
+                    状态：<b>{release?.status ?? '未发布'}</b>
+                    {release && <span className="hint"> · {timeOf(release.updatedAt)}</span>}
+                  </div>
+                  {release?.output && <pre className="release-output">{release.output}</pre>}
+                  <div className="req-actions">
+                    <button className="btn small cyan" disabled={!project.releaseCommand || releasing !== null || release?.status === 'succeeded'} onClick={doRelease}>
+                      <Icon name="play" size={12} />
+                      {releasing === 'release' ? '发布中…' : '发布'}
+                    </button>
+                    <button className="btn small" disabled={!project.rollbackCommand || releasing !== null || release?.status !== 'succeeded'} onClick={doRollback}>
+                      <Icon name="refresh" size={12} />
+                      {releasing === 'rollback' ? '回滚中…' : '回滚'}
+                    </button>
+                  </div>
+                  {!project.releaseCommand && <div className="hint">未配置发布命令，请在设置页填写。</div>}
+                  {!project.rollbackCommand && <div className="hint">未配置回滚命令，请在设置页填写。</div>}
+                </div>
+              )}
             </>
           )}
           {tab === 'live' && <LiveTab events={storyEvents} />}
+          {tab === 'tasks' && (
+            <TaskTab
+              storyId={story.id}
+              projectId={story.projectId}
+              storyStatus={story.status}
+              acIds={story.acceptance.map((ac) => ac.acId)}
+              lastEventSeq={lastEventSeq}
+              onToast={onToast}
+              onChanged={onChanged}
+            />
+          )}
           {tab === 'dod' && (
             <>
+              {story.acceptance.length > 0 && (
+                <>
+                  <div className="section-label">验收标准证据（{story.acceptance.filter((a) => a.status === 'pass').length}/{story.acceptance.length}）</div>
+                  {story.acceptance.map((ac) => (
+                    <div className="dod-item" key={ac.id}>
+                      <span className={`mark ${ac.status === 'pass' ? 'pass' : ac.status === 'fail' ? 'fail' : 'pending'}`}>
+                        <Icon name={ac.status === 'pass' ? 'check' : ac.status === 'fail' ? 'x' : 'clock'} size={14} />
+                      </span>
+                      <div className="info">
+                        <div className="label">{ac.acId}</div>
+                        <div className="cmd">Given {ac.given} · When {ac.when} · Then {ac.then}</div>
+                        {ac.test && <div className="cmd">test: {ac.test}</div>}
+                        {ac.evidence && <pre>{ac.evidence}</pre>}
+                      </div>
+                      <span className={`badge ${ac.status === 'pass' ? 'green' : ac.status === 'fail' ? 'red' : ''}`}>{ac.status}</span>
+                    </div>
+                  ))}
+                  <div className="section-label" style={{ marginTop: 18 }}>DoD 门禁</div>
+                </>
+              )}
+              {story.acceptance.length > 0 && story.status === 'review' && (
+                <div className="ac-feedback">
+                  <textarea
+                    value={acFeedback}
+                    onChange={(e) => setAcFeedback(e.target.value)}
+                    placeholder="针对具体验收标准的退回意见（例如 AC2 的断言不充分）"
+                  />
+                  <button
+                    className="btn small amber"
+                    disabled={!acFeedback.trim()}
+                    onClick={() => {
+                      const message = `请按以下验收标准反馈修改：${acFeedback.trim()}`;
+                      setAcFeedback('');
+                      void onRework(message);
+                    }}
+                  >
+                    <Icon name="refresh" size={12} />
+                    带反馈退回
+                  </button>
+                </div>
+              )}
               {story.dod.map((d) => (
                 <div className="dod-item" key={d.id}>
                   <span className={`mark ${d.status === 'pass' ? 'pass' : d.status === 'fail' ? 'fail' : 'pending'}`}>
@@ -254,7 +645,29 @@ export function Drawer({
               ))}
             </>
           )}
-          {tab === 'diff' && <DiffView diff={diff} />}
+          {tab === 'diff' && (
+            <>
+              {diff.files.length > 0 && (
+                <div className="diff-summary">
+                  <div className="diff-summary-head">
+                    风险
+                    <span className={`badge ${diff.risk === 'high' ? 'red' : diff.risk === 'medium' ? 'amber' : 'green'}`}>{diff.risk}</span>
+                  </div>
+                  {diff.files.map((file) => (
+                    <div className="diff-file" key={file.path}>
+                      <span className="df-path">{file.path}</span>
+                      <span className="df-add">+{file.added}</span>
+                      <span className="df-del">-{file.removed}</span>
+                      {file.risk !== 'low' && (
+                        <span className={`badge ${file.risk === 'high' ? 'red' : 'amber'}`}>{file.risk}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <DiffView diff={diff.diff} />
+            </>
+          )}
           {tab === 'team' && <TeamTab run={team.run} sessions={team.sessions} />}
         </div>
 
@@ -285,14 +698,14 @@ export function Drawer({
                 className="resume-input"
                 value={resumeMsg}
                 onChange={(e) => setResumeMsg(e.target.value)}
-                placeholder="给 agent 的继续指令（留空用默认）"
+                placeholder="继续/返工指令（必填）：说明本轮要完成或修改什么"
                 aria-label="继续指令"
               />
               <button
                 className="btn cyan"
-                disabled={busy}
+                disabled={busy || !resumeMsg.trim()}
                 onClick={() => {
-                  onResume(resumeMsg.trim() || '请继续完成该故事，确保满足验收标准与 DoD。');
+                  onResume(resumeMsg.trim());
                   setResumeMsg('');
                 }}
               >
@@ -307,7 +720,23 @@ export function Drawer({
           )}
           {story.status === 'review' && (
             <>
-              <button className="btn" disabled={busy} onClick={() => onAction('rework')}>
+              <input
+                className="resume-input"
+                value={reworkReason}
+                onChange={(e) => setReworkReason(e.target.value)}
+                placeholder="退回原因（必填，将作为修改要求发给 agent）"
+                aria-label="退回原因"
+              />
+              <button
+                className="btn"
+                disabled={busy || !reworkReason.trim()}
+                onClick={async () => {
+                  const reason = reworkReason.trim();
+                  await onRework(reason);
+                  setResumeMsg(`请按以下意见修改：${reason}`);
+                  setReworkReason('');
+                }}
+              >
                 <Icon name="refresh" size={14} />
                 退回修改
               </button>
@@ -319,6 +748,39 @@ export function Drawer({
           )}
         </div>
       </div>
+      {peek && (
+        <DependencyPeekModal
+          projectId={project.id}
+          target={peek}
+          onClose={() => setPeek(null)}
+          onOpenFull={(item) => {
+            setPeek(null);
+            onOpenStory?.(item.id);
+          }}
+        />
+      )}
+      {suggestOpen && (
+        <DependencySuggestModal
+          projectId={project.id}
+          entityType="story"
+          entityId={story.id}
+          entityTitle={story.title}
+          onClose={() => setSuggestOpen(false)}
+          onApplied={async () => {
+            await refreshDeps();
+            await onChanged();
+          }}
+          onToast={onToast}
+        />
+      )}
+      {bugOpen && (
+        <BugReportModal
+          story={story}
+          onClose={() => setBugOpen(false)}
+          onCreated={onChanged}
+          onToast={onToast}
+        />
+      )}
     </>
   );
 }

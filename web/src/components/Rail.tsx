@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { Approval, EventRow } from '@acp-scrum/shared';
+import type { Approval, EventRow } from '@riccon-scrum/shared';
 import { Icon } from '../icons';
 import { eventText, eventVisual, coalesceEvents, timeOf } from '../ui';
 

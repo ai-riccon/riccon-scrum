@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type * as acp from '@agentclientprotocol/sdk';
-import type { EventPayload } from '@acp-scrum/shared';
+import type { EventPayload } from '@riccon-scrum/shared';
 import { AcpRunner } from '../acp/runner';
 import { getAgentSpec } from '../acp/agents';
 import { config } from '../config';
@@ -16,7 +16,7 @@ async function git(cwd: string, ...args: string[]): Promise<void> {
 }
 
 async function main() {
-  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'acp-smoke-'));
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'riccon-smoke-'));
   await git(repo, 'init', '-b', 'main');
   await git(repo, 'config', 'user.email', 'smoke@test.local');
   await git(repo, 'config', 'user.name', 'smoke');

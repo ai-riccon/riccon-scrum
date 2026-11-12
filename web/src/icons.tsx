@@ -92,6 +92,7 @@ const paths: Record<string, React.ReactNode> = {
     </>
   ),
   dot: <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />,
+  list: <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />,
 };
 
 export type IconName = keyof typeof paths;

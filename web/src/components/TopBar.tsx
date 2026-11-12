@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Project, Story } from '@acp-scrum/shared';
+import type { Project, Story } from '@riccon-scrum/shared';
 import { Icon } from '../icons';
 import { STATUS_META } from '../ui';
 
@@ -10,9 +10,11 @@ export function TopBar({
   connected,
   onNewStory,
   onSettings,
-  onProfile,
+  onDocs,
   onSearch,
   onMetrics,
+  onRequirements,
+  onBugs,
   onSwitchProject,
   onRegister,
 }: {
@@ -22,9 +24,11 @@ export function TopBar({
   connected: boolean;
   onNewStory: () => void;
   onSettings: () => void;
-  onProfile: () => void;
+  onDocs: () => void;
   onSearch: () => void;
   onMetrics: () => void;
+  onRequirements: () => void;
+  onBugs: () => void;
   onSwitchProject: (id: string) => void;
   onRegister: () => void;
 }) {
@@ -40,7 +44,7 @@ export function TopBar({
         </span>
         <div>
           <div className="brand-name">
-            acp<em>·</em>scrum
+            riccon<em>·</em>scrum
           </div>
           <div className="brand-sub">Agent Mission Control</div>
         </div>
@@ -116,16 +120,22 @@ export function TopBar({
         {connected ? '实时连接' : '重连中…'}
       </div>
 
+      <button className="btn icon ghost" onClick={onRequirements} aria-label="需求工作台" title="需求工作台">
+        <Icon name="sparkles" size={16} />
+      </button>
+      <button className="btn icon ghost" onClick={onBugs} aria-label="Bug 反馈" title="Bug 反馈">
+        <Icon name="alert" size={16} />
+      </button>
       <button className="btn icon ghost" onClick={onMetrics} aria-label="流动度量" title="流动度量">
         <Icon name="activity" size={16} />
       </button>
       <button className="btn icon ghost" onClick={onSearch} aria-label="代码搜索" title="代码搜索 (Ctrl+K)">
         <Icon name="eye" size={16} />
       </button>
-      <button className="btn icon ghost" onClick={onProfile} aria-label="项目档案" title="项目档案">
+      <button className="btn icon ghost" onClick={onDocs} aria-label="项目文档" title="项目文档">
         <Icon name="file" size={16} />
       </button>
-      <button className="btn icon ghost" onClick={onSettings} aria-label="项目设置" title="项目设置">
+      <button className="btn icon ghost" onClick={onSettings} aria-label="设置" title="设置">
         <Icon name="layers" size={16} />
       </button>
       <button className="btn primary" onClick={onNewStory}>

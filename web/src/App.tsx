@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { EventRow } from '@acp-scrum/shared';
+import type { Category, EventRow, Tag } from '@riccon-scrum/shared';
 import { api, useLiveData } from './api';
 import { Board } from './components/Board';
+import { CategoryFilter } from './components/CategoryPicker';
 import { CreateModal } from './components/CreateModal';
+import { DependencyGraphModal } from './components/DependencyGraphModal';
+import { TagFilter } from './components/TagPicker';
 import { Drawer } from './components/Drawer';
 import { MetricsModal } from './components/MetricsModal';
-import { ProfileModal } from './components/ProfileModal';
+import { DocsPage } from './components/DocsPage';
 import { Rail } from './components/Rail';
 import { RegisterModal, type RegisterInput } from './components/RegisterModal';
+import { RequirementsPage } from './components/RequirementsPage';
 import { SearchPalette } from './components/SearchPalette';
-import { SettingsModal } from './components/SettingsModal';
+import { SettingsPage } from './components/SettingsPage';
+import { BugInbox } from './components/BugInbox';
 import { Toasts, type Toast } from './components/Toasts';
 import { TopBar } from './components/TopBar';
 import { Icon } from './icons';
@@ -30,20 +35,43 @@ export default function App() {
       if (p.type === 'story.status' && p.to === 'review') pushToast('info', 'DoD 全过，进入人工验收');
       if (p.type === 'story.status' && p.to === 'done') pushToast('success', '故事已合并到主分支');
       if (p.type === 'approval.requested') pushToast('info', '需要你的决策：' + p.approval.title);
+      if (p.type === 'requirement.draft') pushToast(p.issues > 0 ? 'error' : 'success', p.issues > 0 ? `需求草稿已生成，${p.issues} 个错误待修复` : `需求草稿已生成：${p.stories} 个故事`);
+      if (p.type === 'requirement.materialized') pushToast('success', `需求已物化：生成 ${p.storyIds.length} 个用户故事`);
+      if (p.type === 'requirement.split') pushToast('success', `需求已拆分为 ${p.children} 个子需求`);
+      if (p.type === 'dependency.override') pushToast('info', `已跳过前置：${p.predecessors.join('、')}`);
+      if (p.type === 'contract.result' && !p.ok) pushToast('error', '契约检查未通过，合并被阻止');
+      if (p.type === 'task.plan') pushToast('info', `任务计划已生成：${p.tasks} 项`);
+      if (p.type === 'task.status' && p.to === 'failed') pushToast('error', `任务 ${p.taskKey} 失败`);
+      if (p.type === 'task.verify' && !p.ok) pushToast('error', `任务 ${p.taskKey} 验证未通过`);
+      if (p.type === 'change.requested') pushToast('info', `需求变更已创建：影响 ${p.impact} 个故事`);
+      if (p.type === 'change.materialized') pushToast('success', '需求变更已派生新需求');
+      if (p.type === 'bug.reported') pushToast(p.severity === 'blocker' || p.severity === 'critical' ? 'error' : 'info', `Bug 已上报：${p.severity}/${p.priority}`);
+      if (p.type === 'bug.fix_created') pushToast('info', '已创建 Bug 修复故事');
+      if (p.type === 'bug.status' && p.to === 'fixed') pushToast('info', 'Bug 已修复，等待人工验证');
+      if (p.type === 'document.generated') pushToast('success', `文档已生成：${p.docType}/${p.slug} v${p.version}`);
+      if (p.type === 'document.synced') pushToast(p.conflicts > 0 ? 'info' : 'success', `文档同步完成：写入 ${p.written} 个文件`);
     },
     [pushToast],
   );
 
-  const { projects, stories, approvals, events, connected, refresh } = useLiveData(onEvent);
+  const { projects, stories, requirements, approvals, events, connected, refresh } = useLiveData(onEvent);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [metricsOpen, setMetricsOpen] = useState(false);
+  const [requirementsOpen, setRequirementsOpen] = useState(false);
+  const [bugsOpen, setBugsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagFilter, setTagFilter] = useState('');
+  const [graphOpen, setGraphOpen] = useState(false);
+  const [requirementsFocusId, setRequirementsFocusId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectId && projects.length > 0) setProjectId(projects[0].id);
@@ -84,7 +112,41 @@ export default function App() {
   }, []);
 
   const project = projects.find((p) => p.id === projectId) ?? projects[0];
+
+  const refreshCategories = useCallback(async () => {
+    if (!project) return;
+    setCategories(await api.categories(project.id));
+  }, [project?.id]);
+
+  const refreshTags = useCallback(async () => {
+    if (!project) return;
+    setTags(await api.tags(project.id));
+  }, [project?.id]);
+
+  useEffect(() => {
+    if (!project) return;
+    setCategoryFilter('');
+    setTagFilter('');
+    void refreshCategories().catch(() => setCategories([]));
+    void refreshTags().catch(() => setTags([]));
+  }, [project?.id, refreshCategories, refreshTags]);
+
   const projectStories = useMemo(() => (project ? stories.filter((s) => s.projectId === project.id) : []), [stories, project]);
+  const boardStories = useMemo(() => {
+    let list = projectStories;
+    if (categoryFilter) {
+      const selected = categories.find((category) => category.id === categoryFilter);
+      if (selected) {
+        const scope = new Set(
+          categories.filter((category) => category.path.startsWith(selected.path)).map((category) => category.id),
+        );
+        list = list.filter((story) => story.categoryId && scope.has(story.categoryId));
+      }
+    }
+    if (tagFilter) list = list.filter((story) => story.tags?.some((tag) => tag.id === tagFilter));
+    return list;
+  }, [projectStories, categoryFilter, categories, tagFilter]);
+  const projectRequirements = useMemo(() => (project ? requirements.filter((r) => r.projectId === project.id) : []), [requirements, project]);
   const selected = useMemo(() => stories.find((s) => s.id === selectedId) ?? null, [stories, selectedId]);
   const liveStoryIds = useMemo(() => {
     const latest = new Map<string, string>();
@@ -130,24 +192,6 @@ export default function App() {
     [project, pushToast, refresh],
   );
 
-  const saveSettings = useCallback(
-    async (patch: { agentKind: string; teamMode: boolean }) => {
-      if (!project) return;
-      setBusy(true);
-      try {
-        await api.updateSettings(project.id, patch);
-        pushToast('success', '项目设置已保存');
-        setSettingsOpen(false);
-        await refresh();
-      } catch (err) {
-        pushToast('error', err instanceof Error ? err.message : String(err));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [project, pushToast, refresh],
-  );
-
   const decide = useCallback(
     async (id: string, status: 'approved' | 'denied', optionId?: string) => {
       try {
@@ -179,12 +223,12 @@ export default function App() {
 
   return (
     <div className="app">
-      <TopBar project={project} projects={projects} stories={projectStories} connected={connected} onNewStory={() => setCreateOpen(true)} onSettings={() => setSettingsOpen(true)} onProfile={() => setProfileOpen(true)} onSearch={() => setSearchOpen(true)} onMetrics={() => setMetricsOpen(true)} onSwitchProject={switchProject} onRegister={() => setRegisterOpen(true)} />
+      <TopBar project={project} projects={projects} stories={projectStories} connected={connected} onNewStory={() => setCreateOpen(true)} onSettings={() => setSettingsOpen(true)} onDocs={() => setDocsOpen(true)} onSearch={() => setSearchOpen(true)} onMetrics={() => setMetricsOpen(true)} onRequirements={() => setRequirementsOpen(true)} onBugs={() => setBugsOpen(true)} onSwitchProject={switchProject} onRegister={() => setRegisterOpen(true)} />
       <div className="main">
         {projects.length === 0 ? (
           <div className="empty-state">
             <span className="empty-mark"><Icon name="logo" size={34} style={{ color: '#fff' }} /></span>
-            <h2>欢迎使用 acp·scrum</h2>
+            <h2>欢迎使用 riccon·scrum</h2>
             <p>注册一个 git 仓库作为项目，用智能体团队驱动用户故事，按 DoD 门禁交付。</p>
             <button className="btn primary" onClick={() => setRegisterOpen(true)}>
               <Icon name="plus" size={15} />
@@ -196,23 +240,102 @@ export default function App() {
             <div className="board-wrap">
               <div className="board-toolbar">
                 <span className="board-title">用户故事看板</span>
-                <span className="badge">{projectStories.length} 个故事</span>
+                <span className="badge">{boardStories.length} 个故事</span>
+                <CategoryFilter categories={categories} value={categoryFilter} onChange={setCategoryFilter} />
+                <TagFilter tags={tags} value={tagFilter} onChange={setTagFilter} />
+                <button className="btn small ghost" onClick={() => setGraphOpen(true)}>
+                  <Icon name="layers" size={12} />
+                  依赖图
+                </button>
                 <span className="spacer" />
                 <span className="badge cyan">ACP · {project?.agentKind ?? 'opencode'}</span>
               </div>
-              <Board stories={projectStories} selectedId={selectedId} liveStoryIds={liveStoryIds} onOpen={setSelectedId} onAction={runAction} />
+              <Board stories={boardStories} selectedId={selectedId} liveStoryIds={liveStoryIds} onOpen={setSelectedId} onAction={runAction} />
             </div>
             <Rail approvals={approvals} events={events} onDecide={decide} />
           </>
         )}
       </div>
 
-      {selected && <Drawer story={selected} events={events} busy={busy} onClose={() => setSelectedId(null)} onAction={(a) => runAction(selected.id, a)} onResume={(msg) => resume(selected.id, msg)} />}
+      {selected && (
+        <Drawer
+          story={selected}
+          project={project}
+          events={events}
+          busy={busy}
+          categories={categories}
+          tags={tags}
+          onTagsChanged={refreshTags}
+          allStories={projectStories}
+          onClose={() => setSelectedId(null)}
+          onAction={(a) => runAction(selected.id, a)}
+          onRework={(reason) => resume(selected.id, reason)}
+          onResume={(msg) => resume(selected.id, msg)}
+          onToast={pushToast}
+          onChanged={refresh}
+          onOpenStory={(id) => setSelectedId(id)}
+        />
+      )}
+      {graphOpen && project && (
+        <DependencyGraphModal
+          projectId={project.id}
+          kind="story"
+          onClose={() => setGraphOpen(false)}
+          onSelect={(node) => {
+            setSelectedId(node.id);
+            setGraphOpen(false);
+          }}
+        />
+      )}
       {createOpen && project && <CreateModal projectName={project.name} busy={busy} onClose={() => setCreateOpen(false)} onCreate={create} />}
-      {settingsOpen && project && <SettingsModal project={project} busy={busy} onClose={() => setSettingsOpen(false)} onSave={saveSettings} />}
-      {profileOpen && project && <ProfileModal project={project} onClose={() => setProfileOpen(false)} />}
-      {searchOpen && project && <SearchPalette project={project} onClose={() => setSearchOpen(false)} />}
+      {settingsOpen && project && <SettingsPage key={project.id} project={project} onClose={() => setSettingsOpen(false)} onToast={pushToast} onChanged={refresh} />}
+      {requirementsOpen && project && (
+        <RequirementsPage
+          project={project}
+          requirements={projectRequirements}
+          events={events}
+          onClose={() => {
+            setRequirementsOpen(false);
+            setRequirementsFocusId(null);
+          }}
+          onToast={pushToast}
+          onChanged={refresh}
+          onCategoriesChanged={refreshCategories}
+          tags={tags}
+          onTagsChanged={refreshTags}
+          focusId={requirementsFocusId}
+        />
+      )}
+      {docsOpen && project && <DocsPage project={project} onClose={() => setDocsOpen(false)} onToast={pushToast} />}
+      {searchOpen && project && (
+        <SearchPalette
+          project={project}
+          onClose={() => setSearchOpen(false)}
+          onOpenStory={(id) => {
+            setSelectedId(id);
+            setSearchOpen(false);
+          }}
+          onOpenRequirement={(id) => {
+            setRequirementsFocusId(id);
+            setRequirementsOpen(true);
+            setSearchOpen(false);
+          }}
+        />
+      )}
       {metricsOpen && project && <MetricsModal project={project} onClose={() => setMetricsOpen(false)} />}
+      {bugsOpen && project && (
+        <BugInbox
+          project={project}
+          stories={projectStories}
+          onClose={() => setBugsOpen(false)}
+          onChanged={refresh}
+          onToast={pushToast}
+          onOpenStory={(id) => {
+            setBugsOpen(false);
+            setSelectedId(id);
+          }}
+        />
+      )}
       {registerOpen && <RegisterModal busy={busy} onClose={() => setRegisterOpen(false)} onRegister={register} />}
       <Toasts toasts={toasts} />
     </div>

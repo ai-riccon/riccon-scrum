@@ -1,0 +1,64 @@
+{
+  "name": "duplicate-existing",
+  "description": "负例：与现有故事标题高度重复，应触发 story-title-existing",
+  "existingTitles": ["新增除法能力"],
+  "historicalTitles": [],
+  "dodCommandCount": 1,
+  "requireMachineDod": true,
+  "expectErrorCodes": ["story-title-existing"],
+  "draft": {
+    "summary": "测试用需求",
+    "goals": ["验证重复故事门禁"],
+    "nonGoals": ["不引入第三方库"],
+    "personas": ["用户"],
+    "assumptions": [],
+    "openQuestions": [],
+    "stories": [
+      {
+        "key": "R1-S1",
+        "title": "新增除法能力",
+        "persona": "用户",
+        "value": "获得价值一",
+        "description": "描述一",
+        "acceptance": [
+          { "id": "AC1", "given": "前提一", "when": "动作一", "then": "结果一", "test": "AC1 用例一" }
+        ],
+        "dod": ["test: npm test"],
+        "size": "S",
+        "dependsOn": [],
+        "clauses": ["R1.1"],
+        "outOfScope": []
+      },
+      {
+        "key": "R1-S2",
+        "title": "第二个独立故事",
+        "persona": "用户",
+        "value": "获得价值二",
+        "description": "描述二",
+        "acceptance": [
+          { "id": "AC1", "given": "前提二", "when": "动作二", "then": "结果二", "test": "AC1 用例二" }
+        ],
+        "dod": ["test: npm test"],
+        "size": "S",
+        "dependsOn": [],
+        "clauses": ["R1.2"],
+        "outOfScope": []
+      },
+      {
+        "key": "R1-S3",
+        "title": "第三个独立故事",
+        "persona": "用户",
+        "value": "获得价值三",
+        "description": "描述三",
+        "acceptance": [
+          { "id": "AC1", "given": "前提三", "when": "动作三", "then": "结果三", "test": "AC1 用例三" }
+        ],
+        "dod": ["test: npm test"],
+        "size": "S",
+        "dependsOn": [],
+        "clauses": ["R1.3"],
+        "outOfScope": []
+      }
+    ]
+  }
+}

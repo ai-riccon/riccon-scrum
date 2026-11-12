@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { EventPayload, EventRow } from '@acp-scrum/shared';
+import type { EventPayload, EventRow } from '@riccon-scrum/shared';
 import { appendEvent } from './db';
 
 class EventBus extends EventEmitter {

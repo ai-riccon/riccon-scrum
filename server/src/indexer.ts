@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { CodeIndexStats, CodeSearchResult, CodeSymbol } from '@acp-scrum/shared';
+import type { CodeIndexStats, CodeSearchResult, CodeSymbol } from '@riccon-scrum/shared';
 import { clearIndex, getIndexEntries, upsertIndexEntry, deleteIndexEntry } from './db';
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage', '.tmp', '__pycache__', 'target', '.venv', 'venv']);
@@ -54,8 +54,7 @@ function lineOf(content: string, index: number): number {
   return line;
 }
 
-export function extractSymbols(content: string, language: string): CodeSymbol[] {
-  const symbols: CodeSymbol[] = [];
+export function extractSymbols(content: string, language: string): CodeSymbol[] {  const symbols: CodeSymbol[] = [];
   const push = (re: RegExp, kind: string) => {
     for (const m of content.matchAll(re)) {
       if (m[1]) symbols.push({ name: m[1], kind, line: lineOf(content, m.index ?? 0) });
@@ -108,6 +107,47 @@ export function extractSymbols(content: string, language: string): CodeSymbol[] 
   });
 }
 
+export function extractImports(content: string, language: string): string[] {
+  const out = new Set<string>();
+  const push = (re: RegExp) => {
+    for (const m of content.matchAll(re)) if (m[1]) out.add(m[1].trim());
+  };
+  switch (language) {
+    case 'TypeScript':
+    case 'JavaScript':
+    case 'Vue':
+    case 'Svelte':
+      push(/(?:import|export)\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g);
+      push(/require\(\s*['"]([^'"]+)['"]\s*\)/g);
+      push(/import\(\s*['"]([^'"]+)['"]\s*\)/g);
+      break;
+    case 'Python':
+      push(/^\s*from\s+([A-Za-z0-9_\.]+)\s+import/gm);
+      push(/^\s*import\s+([A-Za-z0-9_\.]+)/gm);
+      break;
+    case 'Go':
+      push(/^\s*import\s+(?:\(\s*)?["`]([^"`]+)["`]/gm);
+      push(/^\s*["`]([A-Za-z0-9_\.\/-]+)["`]\s*$/gm);
+      break;
+    case 'Rust':
+      push(/^\s*use\s+([A-Za-z0-9_:]+)/gm);
+      break;
+    case 'Java':
+    case 'Kotlin':
+    case 'C#':
+      push(/^\s*(?:import|using)\s+([A-Za-z0-9_\.]+)\s*;?/gm);
+      break;
+    case 'Ruby':
+      push(/^\s*require(?:_relative)?\s+['"]([^'"]+)['"]/gm);
+      break;
+    case 'PHP':
+      push(/^\s*(?:require|include)(?:_once)?\s*\(?\s*['"]([^'"]+)['"]/gm);
+      push(/^\s*use\s+([A-Za-z0-9_\\]+)/gm);
+      break;
+  }
+  return [...out].slice(0, 200);
+}
+
 export async function indexProject(projectId: string, repoPath: string): Promise<CodeIndexStats> {
   const files = await walk(repoPath);
   const existing = new Map(getIndexEntries(projectId).map((e) => [e.path, e]));
@@ -117,18 +157,20 @@ export async function indexProject(projectId: string, repoPath: string): Promise
   for (const f of files) {
     seen.add(f.rel);
     const prev = existing.get(f.rel);
-    if (prev && prev.mtime === f.mtime && prev.size === f.size) {
+    if (prev && prev.mtime === f.mtime && prev.size === f.size && prev.imports !== null) {
       symbolCount += prev.symbols.length;
       continue;
     }
     let symbols: CodeSymbol[] = [];
+    let imports: string[] = [];
     try {
       const content = await fs.readFile(f.abs, 'utf8');
       symbols = extractSymbols(content, f.language);
+      imports = extractImports(content, f.language);
     } catch {
       // unreadable
     }
-    upsertIndexEntry(projectId, f.rel, f.language, symbols, f.mtime, f.size);
+    upsertIndexEntry(projectId, f.rel, f.language, symbols, imports, f.mtime, f.size);
     symbolCount += symbols.length;
   }
   for (const [p] of existing) {

@@ -1,0 +1,10 @@
+{
+  "name": "schema-invalid",
+  "description": "负例：不可解析/空草稿，应触发 schema",
+  "existingTitles": [],
+  "historicalTitles": [],
+  "dodCommandCount": 1,
+  "requireMachineDod": true,
+  "expectErrorCodes": ["schema"],
+  "draft": null
+}

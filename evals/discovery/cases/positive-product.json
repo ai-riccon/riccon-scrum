@@ -1,0 +1,64 @@
+{
+  "name": "positive-product",
+  "description": "合法草稿：3 个独立故事、完整 GWT、AC 测试映射、DoD 与条款齐全",
+  "existingTitles": ["历史除法能力"],
+  "historicalTitles": ["历史统计能力"],
+  "dodCommandCount": 1,
+  "requireMachineDod": true,
+  "expectNoErrors": true,
+  "draft": {
+    "summary": "为 math.js 增加 product(values)，空数组返回 1，并保持既有函数不变。",
+    "goals": ["product 对数字数组返回乘积", "空数组返回 1", "既有 add/multiply/divide 行为不变"],
+    "nonGoals": ["不引入第三方库", "不修改既有函数签名"],
+    "personas": ["库调用方"],
+    "assumptions": [],
+    "openQuestions": [],
+    "stories": [
+      {
+        "key": "R1-S1",
+        "title": "使用 product 计算数字数组乘积",
+        "persona": "库调用方",
+        "value": "一次调用得到数组乘积",
+        "description": "实现 product(values) 并导出。",
+        "acceptance": [
+          { "id": "AC1", "given": "输入 [2,3,4]", "when": "调用 product", "then": "返回 24", "test": "AC1 product 对 [2,3,4] 返回 24" }
+        ],
+        "dod": ["test: npm test"],
+        "size": "S",
+        "dependsOn": [],
+        "clauses": ["R1.1"],
+        "outOfScope": []
+      },
+      {
+        "key": "R1-S2",
+        "title": "使用 product 处理空数组",
+        "persona": "库调用方",
+        "value": "空数组无需额外判空",
+        "description": "空数组返回乘法单位元 1。",
+        "acceptance": [
+          { "id": "AC1", "given": "输入空数组", "when": "调用 product", "then": "返回 1", "test": "AC1 product 对空数组返回 1" }
+        ],
+        "dod": ["test: npm test"],
+        "size": "S",
+        "dependsOn": [],
+        "clauses": ["R1.2"],
+        "outOfScope": []
+      },
+      {
+        "key": "R1-S3",
+        "title": "保持既有数学函数行为不变",
+        "persona": "既有调用方",
+        "value": "升级后无需修改调用代码",
+        "description": "add、multiply、divide 的结果与导出保持不变。",
+        "acceptance": [
+          { "id": "AC1", "given": "新增 product 后", "when": "调用 add、multiply、divide", "then": "结果与升级前一致", "test": "AC1 既有数学函数结果不变" }
+        ],
+        "dod": ["test: npm test"],
+        "size": "S",
+        "dependsOn": [],
+        "clauses": ["R1.3"],
+        "outOfScope": []
+      }
+    ]
+  }
+}

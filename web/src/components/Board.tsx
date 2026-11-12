@@ -27,6 +27,12 @@ function StoryCard({
             <span className="truncate">{story.branch}</span>
           </span>
         )}
+        {story.tasks && story.tasks.total > 0 && (
+          <span className="chip" title={story.tasks.currentTitle ?? ''}>
+            <Icon name="list" size={11} />
+            {story.tasks.done}/{story.tasks.total} 任务
+          </span>
+        )}
         {story.status === 'in_dev' && live && (
           <span className="live-dot">
             <i />
