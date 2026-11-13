@@ -73,7 +73,6 @@ export function MetricsModal({ project, onClose }: { project: Project; onClose: 
                     <MetricCard icon="clock" label="平均人工评审耗时" value={fmtDuration(quality.avgReviewMs)} color="var(--amber)" sub="进入 Review → Done" />
                     <MetricCard icon="activity" label="每接受故事 tokens" value={quality.avgTokensPerAccepted == null ? '—' : Math.round(quality.avgTokensPerAccepted).toLocaleString()} color="var(--cyan)" />
                     <MetricCard icon="layers" label="已接受故事 tokens" value={quality.totalTokens.toLocaleString()} color="var(--indigo-bright)" />
-                    <MetricCard icon="refresh" label="返工次数" value={String(quality.reworkCount)} color="var(--red)" />
                   </div>
                 </>
               )}

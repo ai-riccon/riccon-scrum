@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Project, Story } from '@riccon-scrum/shared';
 import { Icon } from '../icons';
 import { STATUS_META } from '../ui';
+import { GitBranchChip } from './GitBranch';
 
 export function TopBar({
   project,
@@ -17,6 +18,9 @@ export function TopBar({
   onBugs,
   onSwitchProject,
   onRegister,
+  onManageProjects,
+  onChanged,
+  onToast,
 }: {
   project?: Project;
   projects: Project[];
@@ -31,6 +35,9 @@ export function TopBar({
   onBugs: () => void;
   onSwitchProject: (id: string) => void;
   onRegister: () => void;
+  onManageProjects: () => void;
+  onChanged: () => void | Promise<void>;
+  onToast: (kind: 'success' | 'error' | 'info', text: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const active = stories.filter((s) => s.status === 'in_dev').length;
@@ -53,9 +60,8 @@ export function TopBar({
       {project && (
         <div className="project-switcher">
           <button className="project-chip" onClick={() => setMenuOpen((v) => !v)} title={project.repoPath} aria-label="切换项目">
-            <Icon name="branch" size={13} style={{ color: 'var(--indigo-bright)' }} />
-            <span>{project.name}</span>
-            <span className="repo">{project.repoPath}</span>
+            <Icon name="folder" size={13} style={{ color: 'var(--indigo-bright)' }} />
+            <span className="name">{project.name}</span>
             <Icon name="arrowRight" size={12} style={{ transform: 'rotate(90deg)', color: 'var(--text-low)' }} />
           </button>
           {menuOpen && (
@@ -72,11 +78,21 @@ export function TopBar({
                       setMenuOpen(false);
                     }}
                   >
-                    <Icon name={p.id === project.id ? 'check' : 'branch'} size={13} />
+                    <Icon name={p.id === project.id ? 'check' : 'folder'} size={13} />
                     <span className="pm-name">{p.name}</span>
                     <span className="pm-meta">{p.teamMode ? '团队' : 'Solo'} · {p.agentKind}</span>
                   </button>
                 ))}
+                <button
+                  className="pm-item pm-manage"
+                  onClick={() => {
+                    onManageProjects();
+                    setMenuOpen(false);
+                  }}
+                >
+                  <Icon name="archive" size={13} />
+                  <span className="pm-name">项目归档</span>
+                </button>
                 <button
                   className="pm-item pm-register"
                   onClick={() => {
@@ -85,7 +101,7 @@ export function TopBar({
                   }}
                 >
                   <Icon name="plus" size={13} />
-                  <span className="pm-name">注册新项目</span>
+                  <span className="pm-name">新建项目</span>
                 </button>
               </div>
             </>
@@ -93,10 +109,12 @@ export function TopBar({
         </div>
       )}
 
+      {project && <GitBranchChip project={project} onChanged={onChanged} onToast={onToast} />}
+
       {!project && (
         <button className="btn primary" onClick={onRegister}>
           <Icon name="plus" size={14} />
-          注册项目
+          新建项目
         </button>
       )}
 

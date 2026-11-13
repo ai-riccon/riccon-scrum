@@ -543,6 +543,8 @@ ensureColumn('projects', 'release_command', "release_command TEXT NOT NULL DEFAU
 ensureColumn('projects', 'rollback_command', "rollback_command TEXT NOT NULL DEFAULT ''");
 ensureColumn('projects', 'contract_command', "contract_command TEXT NOT NULL DEFAULT ''");
 ensureColumn('projects', 'policy_gates', "policy_gates TEXT NOT NULL DEFAULT '[]'");
+ensureColumn('projects', 'archived', 'archived INTEGER NOT NULL DEFAULT 0');
+ensureColumn('projects', 'archived_at', 'archived_at TEXT');
 ensureColumn('dod_items', 'blocking', 'blocking INTEGER NOT NULL DEFAULT 1');
 ensureColumn('agent_sessions', 'role', "role TEXT NOT NULL DEFAULT 'solo'");
 ensureColumn('agent_sessions', 'model', 'model TEXT');
@@ -595,6 +597,7 @@ export function createProject(input: {
   autoApproveCommands?: string[];
 }): Project {
   if (!input.name?.trim()) throw new Error('project name required');
+  if (!input.repoPath?.trim()) throw new Error('project folder required');
   const repoPath = path.resolve(input.repoPath);
   if (!fs.existsSync(repoPath)) throw new Error(`repo path not found: ${repoPath}`);
   const p: Project = {
@@ -616,6 +619,8 @@ export function createProject(input: {
     requireMachineDod: input.requireMachineDod ?? true,
     autoApproveReads: input.autoApproveReads ?? true,
     autoApproveCommands: input.autoApproveCommands ?? [],
+    archived: false,
+    archivedAt: null,
     createdAt: now(),
   };
   db.prepare(
@@ -665,6 +670,8 @@ export function getProject(id: string): Project {
     requireMachineDod: r.require_machine_dod === undefined ? true : Boolean(r.require_machine_dod),
     autoApproveReads: r.auto_approve_reads === undefined ? true : Boolean(r.auto_approve_reads),
     autoApproveCommands: JSON.parse((r.auto_approve_commands as string) ?? '[]') as string[],
+    archived: Boolean(r.archived),
+    archivedAt: (r.archived_at as string) ?? null,
     createdAt: r.created_at as string,
   };
 }
@@ -722,8 +729,76 @@ export function updateProjectSettings(
   return getProject(id);
 }
 
-export function listProjects(): Project[] {
-  const rows = db.prepare('SELECT id FROM projects ORDER BY created_at').all() as { id: string }[];
+export function setProjectDefaultBranch(id: string, branch: string): Project {
+  db.prepare('UPDATE projects SET default_branch = ? WHERE id = ?').run(branch, id);
+  return getProject(id);
+}
+
+export function setProjectArchived(id: string, archived: boolean): Project {
+  db.prepare('UPDATE projects SET archived = ?, archived_at = ? WHERE id = ?').run(
+    archived ? 1 : 0,
+    archived ? now() : null,
+    id,
+  );
+  return getProject(id);
+}
+
+export function deleteProject(id: string): void {
+  const project = getProject(id);
+  if (!project.archived) throw new Error('请先归档项目再删除');
+  transaction(() => {
+    const stories = 'SELECT id FROM stories WHERE project_id = ?';
+    const requirements = 'SELECT id FROM requirements WHERE project_id = ?';
+    const tasks = 'SELECT id FROM story_tasks WHERE project_id = ?';
+    const documents = 'SELECT id FROM project_documents WHERE project_id = ?';
+    const bugs = 'SELECT id FROM bug_reports WHERE project_id = ?';
+    const changeRequests = 'SELECT id FROM requirement_change_requests WHERE project_id = ?';
+    db.prepare(`DELETE FROM task_dependencies WHERE task_id IN (${tasks}) OR depends_on_task_id IN (${tasks})`).run(id, id);
+    db.prepare('DELETE FROM story_tasks WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM story_task_plans WHERE project_id = ?').run(id);
+    db.prepare(`DELETE FROM story_files WHERE story_id IN (${stories})`).run(id);
+    db.prepare(`DELETE FROM story_acceptance WHERE story_id IN (${stories})`).run(id);
+    db.prepare(`DELETE FROM dod_items WHERE story_id IN (${stories})`).run(id);
+    db.prepare(`DELETE FROM approvals WHERE story_id IN (${stories})`).run(id);
+    db.prepare(`DELETE FROM agent_sessions WHERE story_id IN (${stories})`).run(id);
+    db.prepare(`DELETE FROM team_runs WHERE story_id IN (${stories})`).run(id);
+    db.prepare('DELETE FROM releases WHERE project_id = ?').run(id);
+    db.prepare(
+      `DELETE FROM events WHERE story_id IN (${stories}) OR story_id IN (${requirements}) OR story_id IN (${bugs}) OR story_id IN (${changeRequests}) OR story_id IN (${documents}) OR story_id = ?`,
+    ).run(id, id, id, id, id, id);
+    db.prepare('DELETE FROM bug_reports WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM requirement_change_requests WHERE project_id = ?').run(id);
+    db.prepare(`DELETE FROM requirement_split_drafts WHERE requirement_id IN (${requirements})`).run(id);
+    db.prepare(`DELETE FROM requirement_versions WHERE requirement_id IN (${requirements})`).run(id);
+    db.prepare(`DELETE FROM requirement_feedback WHERE requirement_id IN (${requirements})`).run(id);
+    db.prepare(`DELETE FROM requirement_messages WHERE requirement_id IN (${requirements})`).run(id);
+    db.prepare(`DELETE FROM requirement_jobs WHERE requirement_id IN (${requirements})`).run(id);
+    db.prepare('DELETE FROM requirements WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM stories WHERE project_id = ?').run(id);
+    db.prepare(`DELETE FROM document_versions WHERE document_id IN (${documents})`).run(id);
+    db.prepare(`DELETE FROM document_sections WHERE document_id IN (${documents})`).run(id);
+    db.prepare('DELETE FROM document_sync_state WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM document_jobs WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM project_documents WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM dependencies WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM entity_tags WHERE project_id = ?').run(id);
+    db.prepare(`DELETE FROM entity_embeddings WHERE entity_id IN (${stories}) OR entity_id IN (${requirements})`).run(id, id);
+    db.prepare('DELETE FROM handoffs WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM categories WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM tags WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM knowledge WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM code_index WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM project_profiles WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+  });
+}
+
+export function listProjects(includeArchived = false): Project[] {
+  const rows = (
+    includeArchived
+      ? db.prepare('SELECT id FROM projects ORDER BY created_at').all()
+      : db.prepare('SELECT id FROM projects WHERE archived = 0 ORDER BY created_at').all()
+  ) as { id: string }[];
   return rows.map((r) => getProject(r.id));
 }
 

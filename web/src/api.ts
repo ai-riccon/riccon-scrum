@@ -60,6 +60,8 @@ import type {
   DocumentVersion,
   ProjectDocument,
   ProjectDocumentSummary,
+  GitRepoState,
+  DirListing,
 } from '@riccon-scrum/shared';
 
 export type DocumentLive = {
@@ -83,9 +85,11 @@ export type RequirementLive = RequirementDetail & {
 };
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = { ...(init?.headers as Record<string, string> | undefined) };
+  if (init?.body !== undefined) headers['Content-Type'] = 'application/json';
   const res = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...init,
+    headers,
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -95,11 +99,10 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  projects: () => req<Project[]>('/projects'),
+  projects: (includeArchived = false) => req<Project[]>(`/projects${includeArchived ? '?includeArchived=1' : ''}`),
   createProject: (b: {
     name: string;
     repoPath: string;
-    defaultBranch?: string;
     agentKind?: string;
     teamMode?: boolean;
     model?: string;
@@ -113,6 +116,14 @@ export const api = {
     autoApproveReads?: boolean;
     autoApproveCommands?: string[];
   }) => req<Project>('/projects', { method: 'POST', body: JSON.stringify(b) }),
+  projectGit: (id: string) => req<GitRepoState>(`/projects/${id}/git`),
+  initProjectRepo: (id: string) => req<GitRepoState>(`/projects/${id}/git/init`, { method: 'POST', body: '{}' }),
+  checkoutBranch: (id: string, branch: string) =>
+    req<GitRepoState>(`/projects/${id}/git/checkout`, { method: 'POST', body: JSON.stringify({ branch }) }),
+  archiveProject: (id: string) => req<Project>(`/projects/${id}/archive`, { method: 'POST', body: '{}' }),
+  unarchiveProject: (id: string) => req<Project>(`/projects/${id}/unarchive`, { method: 'POST', body: '{}' }),
+  deleteProject: (id: string) => req<{ ok: boolean }>(`/projects/${id}`, { method: 'DELETE' }),
+  fsDirs: (dirPath?: string) => req<DirListing>(`/fs/dirs${dirPath ? `?path=${encodeURIComponent(dirPath)}` : ''}`),
   stories: () => req<BoardStory[]>('/stories'),
   requirements: (projectId?: string) => req<Requirement[]>(`/requirements${projectId ? `?projectId=${projectId}` : ''}`),
   requirementMetrics: (projectId?: string) =>

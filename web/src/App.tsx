@@ -13,7 +13,7 @@ import { Rail } from './components/Rail';
 import { RegisterModal, type RegisterInput } from './components/RegisterModal';
 import { RequirementsPage } from './components/RequirementsPage';
 import { SearchPalette } from './components/SearchPalette';
-import { SettingsPage } from './components/SettingsPage';
+import { SettingsPage, type SettingsTab } from './components/SettingsPage';
 import { BugInbox } from './components/BugInbox';
 import { Toasts, type Toast } from './components/Toasts';
 import { TopBar } from './components/TopBar';
@@ -58,6 +58,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('project');
   const [docsOpen, setDocsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [metricsOpen, setMetricsOpen] = useState(false);
@@ -74,7 +75,11 @@ export default function App() {
   const [requirementsFocusId, setRequirementsFocusId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!projectId && projects.length > 0) setProjectId(projects[0].id);
+    if (projects.length === 0) {
+      if (projectId) setProjectId(null);
+      return;
+    }
+    if (!projectId || !projects.some((p) => p.id === projectId)) setProjectId(projects[0].id);
   }, [projects, projectId]);
 
   const switchProject = useCallback((id: string) => {
@@ -82,12 +87,17 @@ export default function App() {
     setSelectedId(null);
   }, []);
 
+  const openSettings = useCallback((tab: SettingsTab) => {
+    setSettingsTab(tab);
+    setSettingsOpen(true);
+  }, []);
+
   const register = useCallback(
     async (input: RegisterInput) => {
       setBusy(true);
       try {
         const p = await api.createProject(input);
-        pushToast('success', `项目「${p.name}」已注册`);
+        pushToast('success', `项目「${p.name}」已创建`);
         setRegisterOpen(false);
         await refresh();
         setProjectId(p.id);
@@ -223,16 +233,16 @@ export default function App() {
 
   return (
     <div className="app">
-      <TopBar project={project} projects={projects} stories={projectStories} connected={connected} onNewStory={() => setCreateOpen(true)} onSettings={() => setSettingsOpen(true)} onDocs={() => setDocsOpen(true)} onSearch={() => setSearchOpen(true)} onMetrics={() => setMetricsOpen(true)} onRequirements={() => setRequirementsOpen(true)} onBugs={() => setBugsOpen(true)} onSwitchProject={switchProject} onRegister={() => setRegisterOpen(true)} />
+      <TopBar project={project} projects={projects} stories={projectStories} connected={connected} onNewStory={() => setCreateOpen(true)} onSettings={() => openSettings('project')} onDocs={() => setDocsOpen(true)} onSearch={() => setSearchOpen(true)} onMetrics={() => setMetricsOpen(true)} onRequirements={() => setRequirementsOpen(true)} onBugs={() => setBugsOpen(true)} onSwitchProject={switchProject} onRegister={() => setRegisterOpen(true)} onManageProjects={() => openSettings('projects')} onChanged={refresh} onToast={pushToast} />
       <div className="main">
         {projects.length === 0 ? (
           <div className="empty-state">
             <span className="empty-mark"><Icon name="logo" size={34} style={{ color: '#fff' }} /></span>
             <h2>欢迎使用 riccon·scrum</h2>
-            <p>注册一个 git 仓库作为项目，用智能体团队驱动用户故事，按 DoD 门禁交付。</p>
+            <p>新建一个项目，选择代码文件夹，用智能体团队驱动用户故事，按 DoD 门禁交付。</p>
             <button className="btn primary" onClick={() => setRegisterOpen(true)}>
               <Icon name="plus" size={15} />
-              注册第一个项目
+              新建第一个项目
             </button>
           </div>
         ) : (
@@ -288,7 +298,7 @@ export default function App() {
         />
       )}
       {createOpen && project && <CreateModal projectName={project.name} busy={busy} onClose={() => setCreateOpen(false)} onCreate={create} />}
-      {settingsOpen && project && <SettingsPage key={project.id} project={project} onClose={() => setSettingsOpen(false)} onToast={pushToast} onChanged={refresh} />}
+      {settingsOpen && project && <SettingsPage key={project.id} project={project} initialTab={settingsTab} onClose={() => setSettingsOpen(false)} onToast={pushToast} onChanged={refresh} />}
       {requirementsOpen && project && (
         <RequirementsPage
           project={project}

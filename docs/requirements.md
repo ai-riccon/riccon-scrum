@@ -26,11 +26,12 @@
 
 | ID | 需求 | 验收标准 | 状态 | 实现证据 |
 | --- | --- | --- | --- | --- |
-| REQ-PROJ-001 | 注册 git 仓库为项目 | 校验路径为 git 仓库；保存名称、路径、默认分支 | 已实现 | `server/src/db.ts`、`server/src/routes.ts`、`web/src/components/RegisterModal.tsx` |
-| REQ-PROJ-002 | 项目级交付配置 | 可配置 agent 终端、团队模式、模型、术语表、DoD 命令、机器 DoD 要求、自动审批策略 | 已实现 | `server/src/db.ts`、`web/src/components/SettingsPage.tsx` |
-| REQ-PROJ-003 | 全局运行参数 | 可配置 WIP、轮次/墙钟/token 预算、空闲回收、默认终端；保存后立即生效 | 已实现 | `server/src/settings.ts`、`shared/src/index.ts` |
-| REQ-PROJ-004 | 多项目切换 | 顶栏切换项目后，看板、设置、画像、搜索、指标切换到对应项目 | 已实现 | `web/src/App.tsx`、`web/src/components/TopBar.tsx` |
-| REQ-PROJ-005 | 配置项可解释 | 每个设置项有用途与影响说明 | 已实现 | `web/src/components/SettingsPage.tsx` |
+| REQ-PROJ-001 | 新建项目 | 通过文件夹选择器选择本地目录，不要求已是 git 仓库；已有仓库自动探测当前分支，非 git 目录可后续一键创建本地仓库 | 已实现 | `server/src/db.ts`、`server/src/routes.ts`、`web/src/components/RegisterModal.tsx`、`FolderPickerModal.tsx` |
+| REQ-PROJ-002 | 项目级交付配置 | 可配置 agent 终端、团队模式、模型、术语表、DoD 命令、机器 DoD 要求、自动审批策略 | 已实现 | `server/src/db.ts`、`web/src/components/settings/SettingsProjectPanes.tsx` |
+| REQ-PROJ-003 | 全局运行参数 | 可配置 WIP、轮次/墙钟/token 预算、空闲回收、默认终端；保存后立即生效 | 已实现 | `server/src/settings.ts`、`shared/src/index.ts`、`web/src/components/settings/SettingsGlobalPanes.tsx` |
+| REQ-PROJ-004 | 多项目切换 | 顶栏切换项目后，看板、设置、画像、搜索、指标切换到对应项目；顶栏展示项目名与当前分支，支持切换分支和创建本地仓库 | 已实现 | `web/src/App.tsx`、`web/src/components/TopBar.tsx`、`GitBranch.tsx` |
+| REQ-PROJ-005 | 配置项可解释 | 每个设置项有用途与影响说明 | 已实现 | `web/src/components/settings/*` |
+| REQ-PROJ-006 | 项目归档与删除 | 项目可归档并从工作台/切换器隐藏；设置中可查看、恢复或永久删除；至少保留一个未归档项目；删除仅级联清理平台数据，不改动本地代码与 Git 分支 | 已实现 | `server/src/db.ts`、`server/src/routes.ts`、`web/src/components/settings/SettingsProjectsPane.tsx` |
 
 ## 3. 入驻与画像
 
@@ -142,7 +143,7 @@
 | REQ-UI-003 | 通知 | DoD 结果、进入验收、完成、待审批产生 Toast | 已实现 | `web/src/App.tsx`、`web/src/components/Toasts.tsx` |
 | REQ-UI-004 | 搜索面板 | Ctrl/Cmd+K 打开，按符号/内容/文件搜索 | 已实现 | `web/src/components/SearchPalette.tsx`、`web/src/App.tsx` |
 | REQ-UI-005 | 项目画像 | 查看技术栈、架构文档、基线结果 | 已实现 | `web/src/components/ProfileModal.tsx` |
-| REQ-UI-006 | 设置页 | 全局与项目设置分栏，逐项说明，保存反馈 | 已实现 | `web/src/components/SettingsPage.tsx` |
+| REQ-UI-006 | 设置页 | 左侧菜单分组（全局：运行参数/向量检索/任务执行；项目：项目配置/交付与门禁/知识库/项目归档），右侧展示对应配置项并逐项说明 | 已实现 | `web/src/components/SettingsPage.tsx`、`web/src/components/settings/*` |
 | REQ-UI-007 | 一键启停 | 根目录 `start.cmd` / `stop.cmd` 管理开发服务 | 已实现 | `start.cmd`、`stop.cmd`、`scripts/dev-control.mjs` |
 
 ## 13. 非功能需求

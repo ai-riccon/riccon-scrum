@@ -1,4 +1,8 @@
 import type { FastifyInstance } from 'fastify';
+import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type {
   ApprovalStatus,
   ChangeImpactItem,
@@ -20,6 +24,7 @@ import {
   createTag,
   deleteCategory,
   deleteDependency,
+  deleteProject,
   deleteTag,
   entityIdsForTag,
   dodItemsForStory,
@@ -56,10 +61,13 @@ import {
   storyTaskSummaries,
   setRequirementCategory,
   setStoryCategory,
+  setProjectArchived,
+  setProjectDefaultBranch,
   tagsByEntity,
   tagsForEntity,
   updateProjectSettings,
 } from './db';
+import { initRepo, repoState, switchBranch } from './git';
 import { manager } from './acp/manager';
 import { AGENT_KINDS } from './acp/agents';
 import { acceptStory, approveStory, reworkStory, resumeStory, startStory, storyDiff } from './service';
@@ -144,8 +152,49 @@ import {
 } from './documents';
 import { cancelDocumentGeneration, generateAgentDocument, generateLegacyRequirementsBaseline } from './document-generator';
 
+function filesystemRoots(): string[] {
+  if (process.platform !== 'win32') return ['/'];
+  const roots: string[] = [];
+  for (let code = 65; code <= 90; code += 1) {
+    const drive = `${String.fromCharCode(code)}:\\`;
+    if (fsSync.existsSync(drive)) roots.push(drive);
+  }
+  return roots;
+}
+
+async function browseDirectories(rawPath?: string) {
+  const target = path.resolve(rawPath?.trim() || os.homedir());
+  const stat = await fs.stat(target).catch(() => null);
+  if (!stat?.isDirectory()) throw new Error(`目录不存在：${target}`);
+  let dirents;
+  try {
+    dirents = await fs.readdir(target, { withFileTypes: true });
+  } catch (err) {
+    throw new Error(`无法读取目录：${err instanceof Error ? err.message : String(err)}`);
+  }
+  const all = dirents
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map((entry) => {
+      const full = path.join(target, entry.name);
+      return { name: entry.name, path: full, isGitRepo: fsSync.existsSync(path.join(full, '.git')) };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+  const parent = path.dirname(target);
+  return {
+    path: target,
+    parent: parent === target ? null : parent,
+    roots: filesystemRoots(),
+    entries: all.slice(0, 400),
+    isGitRepo: fsSync.existsSync(path.join(target, '.git')),
+    truncated: all.length > 400,
+  };
+}
+
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/projects', async () => listProjects());
+  app.get('/api/projects', async (req) => {
+    const { includeArchived } = req.query as { includeArchived?: string };
+    return listProjects(includeArchived === '1' || includeArchived === 'true');
+  });
 
   app.get('/api/settings', async () => ({ global: getGlobalSettings(), agentKinds: AGENT_KINDS }));
 
@@ -167,11 +216,65 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       autoApproveCommands?: string[];
     };
     const global = getGlobalSettings();
+    const repo = await repoState(body.repoPath).catch(() => null);
     return createProject({
       ...body,
+      defaultBranch: body.defaultBranch ?? repo?.branch ?? 'main',
       agentKind: body.agentKind ?? global.defaultAgentKind,
       requireMachineDod: body.requireMachineDod ?? global.requireMachineDod,
     });
+  });
+
+  app.get('/api/projects/:id/git', async (req) => {
+    const { id } = req.params as { id: string };
+    return repoState(getProject(id).repoPath);
+  });
+
+  app.post('/api/projects/:id/archive', async (req) => {
+    const { id } = req.params as { id: string };
+    const project = getProject(id);
+    if (project.archived) return project;
+    if (listStories(id).some((story) => story.status === 'in_dev')) {
+      throw new Error('项目仍有开发中的故事，请先完成或终止后再归档');
+    }
+    if (!listProjects().some((item) => item.id !== id)) throw new Error('至少保留一个未归档项目');
+    return setProjectArchived(id, true);
+  });
+
+  app.post('/api/projects/:id/unarchive', async (req) => {
+    const { id } = req.params as { id: string };
+    return setProjectArchived(id, false);
+  });
+
+  app.delete('/api/projects/:id', async (req) => {
+    const { id } = req.params as { id: string };
+    deleteProject(id);
+    return { ok: true };
+  });
+
+  app.post('/api/projects/:id/git/init', async (req) => {
+    const { id } = req.params as { id: string };
+    const project = getProject(id);
+    await initRepo(project.repoPath);
+    const state = await repoState(project.repoPath);
+    if (state.branch) setProjectDefaultBranch(id, state.branch);
+    return state;
+  });
+
+  app.post('/api/projects/:id/git/checkout', async (req) => {
+    const { id } = req.params as { id: string };
+    const body = req.body as { branch?: string };
+    const branch = body.branch?.trim();
+    if (!branch) throw new Error('请提供要切换的分支名');
+    const project = getProject(id);
+    await switchBranch(project.repoPath, branch);
+    setProjectDefaultBranch(id, branch);
+    return repoState(project.repoPath);
+  });
+
+  app.get('/api/fs/dirs', async (req) => {
+    const { path: dirPath } = req.query as { path?: string };
+    return browseDirectories(dirPath);
   });
 
   app.post('/api/projects/:id/settings', async (req) => {

@@ -40,7 +40,35 @@ export interface Project {
   requireMachineDod: boolean;
   autoApproveReads: boolean;
   autoApproveCommands: string[];
+  archived: boolean;
+  archivedAt: string | null;
   createdAt: string;
+}
+
+export interface GitRepoState {
+  isRepo: boolean;
+  hasCommits: boolean;
+  branch: string | null;
+  branches: string[];
+  detached: boolean;
+  dirty: boolean;
+  root: string | null;
+  error: string | null;
+}
+
+export interface DirEntry {
+  name: string;
+  path: string;
+  isGitRepo: boolean;
+}
+
+export interface DirListing {
+  path: string;
+  parent: string | null;
+  roots: string[];
+  entries: DirEntry[];
+  isGitRepo: boolean;
+  truncated: boolean;
 }
 
 export interface Story {

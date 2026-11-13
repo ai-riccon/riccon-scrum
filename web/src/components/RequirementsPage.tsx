@@ -190,7 +190,7 @@ export function RequirementsPage({
   const [busy, setBusy] = useState<string | null>(null);
   const [comment, setComment] = useState('');
   const [decisions, setDecisions] = useState<Record<string, { decision: 'approve' | 'reject'; comment: string }>>({});
-  const [newOpen, setNewOpen] = useState(requirements.length === 0);
+  const [newOpen, setNewOpen] = useState(false);
   const [newMode, setNewMode] = useState<'chat' | 'form'>('chat');
   const [newMessage, setNewMessage] = useState('');
   const [intakeMsg, setIntakeMsg] = useState('');

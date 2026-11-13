@@ -354,8 +354,13 @@ server (Fastify + node:sqlite)
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| GET | /api/projects | 项目列表 |
-| POST | /api/projects | 注册项目 |
+| GET | /api/projects | 未归档项目列表（`includeArchived=1` 含归档项目） |
+| POST | /api/projects | 新建项目（选择本地文件夹，不要求 git 仓库） |
+| POST | /api/projects/:id/archive\|unarchive | 归档 / 恢复项目 |
+| DELETE | /api/projects/:id | 永久删除已归档项目（级联清理平台数据） |
+| GET | /api/projects/:id/git | 仓库状态、当前分支与本地分支列表 |
+| POST | /api/projects/:id/git/init\|checkout | 创建本地仓库 / 切换分支 |
+| GET | /api/fs/dirs | 新建项目时浏览文件夹 |
 | POST | /api/projects/:id/settings | 更新项目设置 |
 | POST | /api/projects/:id/onboard | 启动入驻 |
 | GET | /api/projects/:id/profile | 入驻画像 |
