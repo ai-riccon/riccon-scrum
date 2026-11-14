@@ -47,7 +47,7 @@ export function MetricsModal({ project, onClose }: { project: Project; onClose: 
           <Icon name="activity" size={18} style={{ color: 'var(--cyan)', marginRight: 10 }} />
           <h3>流动与 DORA 度量</h3>
           <span className="badge cyan" style={{ marginLeft: 10 }}>{project.name}</span>
-          <button className="btn icon ghost" onClick={onClose} aria-label="关闭" style={{ marginLeft: 'auto' }}>
+          <button className="btn icon ghost" onClick={onClose} aria-label="关闭" data-tip="关闭流动与 DORA 度量弹窗" style={{ marginLeft: 'auto' }}>
             <Icon name="close" size={16} />
           </button>
         </div>

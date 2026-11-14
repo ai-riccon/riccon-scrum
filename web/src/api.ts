@@ -62,6 +62,7 @@ import type {
   ProjectDocumentSummary,
   GitRepoState,
   DirListing,
+  TerminalInfo,
 } from '@riccon-scrum/shared';
 
 export type DocumentLive = {
@@ -107,6 +108,7 @@ export const api = {
     teamMode?: boolean;
     model?: string;
     discoveryModel?: string;
+    thinking?: string;
     glossary?: string;
     releaseCommand?: string;
     rollbackCommand?: string;
@@ -342,6 +344,14 @@ export const api = {
     req<{ run: TeamRun | null; sessions: AgentSession[]; tasks: StoryTaskPlan }>(`/stories/${id}/team`),
   settings: () => req<{ global: GlobalSettings; agentKinds: string[] }>('/settings'),
   updateGlobalSettings: (patch: Partial<GlobalSettings>) => req<GlobalSettings>('/settings', { method: 'PUT', body: JSON.stringify(patch) }),
+  terminals: () => req<TerminalInfo[]>('/terminals'),
+  probeTerminal: (kind: string, projectId?: string) =>
+    req<TerminalInfo>(`/terminals/${encodeURIComponent(kind)}/probe`, {
+      method: 'POST',
+      body: JSON.stringify({ projectId }),
+    }),
+  checkTerminalUpdate: (kind: string) =>
+    req<TerminalInfo>(`/terminals/${encodeURIComponent(kind)}/update-check`, { method: 'POST', body: '{}' }),
   updateSettings: (
     id: string,
     patch: {
@@ -349,6 +359,7 @@ export const api = {
       teamMode?: boolean;
       model?: string;
       discoveryModel?: string;
+      thinking?: string;
       glossary?: string;
       releaseCommand?: string;
       rollbackCommand?: string;

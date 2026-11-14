@@ -4,6 +4,7 @@ import { api } from '../../api';
 import { Icon } from '../../icons';
 import type { ProjectPaneProps } from './types';
 import { Help } from './SettingsUi';
+import { confirmAction } from '../ConfirmDialog';
 
 export function KnowledgePane({ project, onToast }: ProjectPaneProps) {
   const [entries, setEntries] = useState<KnowledgeEntry[]>([]);
@@ -21,6 +22,13 @@ export function KnowledgePane({ project, onToast }: ProjectPaneProps) {
       onToast('error', '请填写知识标题与内容');
       return;
     }
+    const ok = await confirmAction({
+      title: '添加知识条目',
+      message: '知识条目会注入需求发现与交付提示词，请确认内容准确。',
+      detail: title.trim(),
+      confirmText: '确认添加',
+    });
+    if (!ok) return;
     try {
       await api.addKnowledge(project.id, {
         kind,
@@ -39,6 +47,15 @@ export function KnowledgePane({ project, onToast }: ProjectPaneProps) {
   };
 
   const remove = async (id: string) => {
+    const entry = entries.find((item) => item.id === id);
+    const ok = await confirmAction({
+      title: '删除知识条目',
+      message: '删除后该条目不再注入提示词，操作不可撤销。',
+      detail: entry?.title ?? id,
+      confirmText: '删除',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.deleteKnowledge(id);
       setEntries(await api.knowledge(project.id));
@@ -77,7 +94,7 @@ export function KnowledgePane({ project, onToast }: ProjectPaneProps) {
         <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="决策、约束、失败原因与修复方式" style={{ minHeight: 100 }} />
       </div>
       <div className="settings-actions">
-        <button className="btn" onClick={add}>
+        <button className="btn" onClick={add} data-tip="把这条知识加入项目知识库，后续需求与交付提示词会检索注入">
           <Icon name="plus" size={13} />
           添加知识
         </button>
@@ -90,7 +107,7 @@ export function KnowledgePane({ project, onToast }: ProjectPaneProps) {
             <span className="badge">{entry.kind}</span>
             <span style={{ flex: 1 }}>{entry.title}</span>
             {entry.tags && <span className="req-note">{entry.tags}</span>}
-            <button className="btn sm ghost" onClick={() => remove(entry.id)} aria-label="删除知识">
+            <button className="btn sm ghost" onClick={() => remove(entry.id)} aria-label="删除知识" data-tip="删除该知识条目，后续不再注入提示词">
               <Icon name="x" size={12} />
             </button>
           </div>

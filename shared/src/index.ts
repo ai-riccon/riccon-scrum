@@ -21,6 +21,43 @@ export interface PolicyGate {
   blocking: boolean;
 }
 
+export interface TerminalChoice {
+  value: string;
+  name: string;
+  description: string | null;
+  group: string | null;
+}
+
+export interface TerminalConfigOption {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  type: 'select' | 'boolean';
+  currentValue: string | boolean;
+  options: TerminalChoice[];
+}
+
+export interface TerminalInfo {
+  kind: string;
+  label: string;
+  description: string;
+  installed: boolean;
+  command: string;
+  version: string | null;
+  packageName: string | null;
+  homepage: string | null;
+  latestVersion: string | null;
+  updateAvailable: boolean | null;
+  updateError: string | null;
+  versionError: string | null;
+  models: TerminalChoice[];
+  configOptions: TerminalConfigOption[];
+  authMethods: string[];
+  probeError: string | null;
+  probedAt: string | null;
+}
+
 export interface Project {
   id: string;
   workspaceId: string;
@@ -32,6 +69,7 @@ export interface Project {
   teamMode: boolean;
   model: string;
   discoveryModel: string;
+  thinking: string;
   glossary: string;
   releaseCommand: string;
   rollbackCommand: string;

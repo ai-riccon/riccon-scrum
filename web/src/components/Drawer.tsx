@@ -14,6 +14,7 @@ import { api, type BoardStory } from '../api';
 import { Icon } from '../icons';
 import { PHASE_META, PHASE_ORDER, ROLE_META, STATUS_META, StatusTag, coalesceEvents, timeOf } from '../ui';
 import { CategorySelect } from './CategoryPicker';
+import { confirmAction } from './ConfirmDialog';
 import { DependencyPeekModal, type DependencyPeekTarget } from './DependencyPeekModal';
 import { DependencySuggestModal } from './DependencySuggestModal';
 import { TagEditor } from './TagPicker';
@@ -246,6 +247,13 @@ export function Drawer({
 
   const addPredecessor = async () => {
     if (!depCandidate) return;
+    const ok = await confirmAction({
+      title: '添加前置依赖',
+      message: '该故事必须等前置故事完成后才能启动。',
+      detail: `前置：${depName(depCandidate)}\n当前：${story.title}`,
+      confirmText: '添加依赖',
+    });
+    if (!ok) return;
     setDepBusy('add');
     try {
       await api.createDependency({
@@ -266,6 +274,14 @@ export function Drawer({
   };
 
   const removeDependency = async (id: string) => {
+    const ok = await confirmAction({
+      title: '移除前置依赖',
+      message: '移除后该故事不再被该前置故事阻塞。',
+      detail: depName(id),
+      confirmText: '移除依赖',
+      tone: 'warning',
+    });
+    if (!ok) return;
     setDepBusy(id);
     try {
       await api.deleteDependency(id);
@@ -283,6 +299,14 @@ export function Drawer({
       onToast('error', '请填写强制开始原因');
       return;
     }
+    const ok = await confirmAction({
+      title: '强制跳过前置依赖',
+      message: '跳过前置会记录越权原因，可能引入集成风险。',
+      detail: `故事：${story.title}\n原因：${overrideReason.trim()}`,
+      confirmText: '强制启动',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setDepBusy('override');
     try {
       await api.forceStartStory(story.id, overrideReason.trim());
@@ -338,6 +362,14 @@ export function Drawer({
   const depName = (id: string) => allStories.find((item) => item.id === id)?.title ?? id;
 
   const doRelease = async () => {
+    const ok = await confirmAction({
+      title: '发布故事',
+      message: '将执行项目配置的发布命令，可能影响线上环境。',
+      detail: story.title,
+      confirmText: '执行发布',
+      tone: 'warning',
+    });
+    if (!ok) return;
     setReleasing('release');
     try {
       const result = await api.release(story.id);
@@ -351,6 +383,14 @@ export function Drawer({
   };
 
   const doRollback = async () => {
+    const ok = await confirmAction({
+      title: '回滚发布',
+      message: '将执行项目配置的回滚命令，线上版本会回退到上一个版本。',
+      detail: story.title,
+      confirmText: '执行回滚',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setReleasing('rollback');
     try {
       const result = await api.rollback(story.id);
@@ -375,7 +415,7 @@ export function Drawer({
           <div className="row">
             <h2 className="drawer-title">{story.title}</h2>
             <StatusTag status={story.status} />
-            <button className="btn icon ghost" onClick={onClose} aria-label="关闭">
+            <button className="btn icon ghost" onClick={onClose} aria-label="关闭" data-tip="关闭故事详情，返回看板">
               <Icon name="close" size={16} />
             </button>
           </div>
@@ -400,7 +440,7 @@ export function Drawer({
               onChange={changeCategory}
               disabled={categoryBusy}
             />
-            <button className="btn small ghost" onClick={() => setBugOpen(true)}>
+            <button className="btn small ghost" onClick={() => setBugOpen(true)} data-tip="上报该故事的缺陷，提交后进入 Bug 分诊队列">
               <Icon name="alert" size={12} />
               反馈 Bug
             </button>
@@ -469,6 +509,7 @@ export function Drawer({
                       <button
                         className="dep-remove"
                         aria-label={`移除前置 ${depName(item.id)}`}
+                        data-tip={`移除前置依赖：${depName(item.id)}`}
                         disabled={depBusy === item.id}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -507,11 +548,11 @@ export function Drawer({
                       </option>
                     ))}
                   </select>
-                  <button className="btn small" disabled={!depCandidate || depBusy === 'add'} onClick={addPredecessor}>
+                  <button className="btn small" disabled={!depCandidate || depBusy === 'add'} onClick={addPredecessor} data-tip="把选中的上游故事设为当前故事的前置依赖">
                     <Icon name="plus" size={12} />
                     添加
                   </button>
-                  <button className="btn small ghost" disabled={depBusy !== null} onClick={() => setSuggestOpen(true)}>
+                  <button className="btn small ghost" disabled={depBusy !== null} onClick={() => setSuggestOpen(true)} data-tip="让 AI 推荐可添加的前置依赖，确认后才创建">
                     <Icon name="sparkles" size={12} />
                     AI 建议依赖
                   </button>
@@ -526,7 +567,7 @@ export function Drawer({
                     onChange={(e) => setOverrideReason(e.target.value)}
                     placeholder="强制开始原因（必填，会记录审计事件）"
                   />
-                  <button className="btn small amber" disabled={depBusy === 'override' || !overrideReason.trim()} onClick={forceStart}>
+                  <button className="btn small amber" disabled={depBusy === 'override' || !overrideReason.trim()} onClick={forceStart} data-tip="跳过未完成的前置依赖强制启动，会记录越权原因">
                     <Icon name="play" size={12} />
                     强制开始
                   </button>
@@ -560,11 +601,11 @@ export function Drawer({
                   </div>
                   {release?.output && <pre className="release-output">{release.output}</pre>}
                   <div className="req-actions">
-                    <button className="btn small cyan" disabled={!project.releaseCommand || releasing !== null || release?.status === 'succeeded'} onClick={doRelease}>
+                    <button className="btn small cyan" disabled={!project.releaseCommand || releasing !== null || release?.status === 'succeeded'} onClick={doRelease} data-tip={project.releaseCommand ? '执行项目发布命令，将已完成故事部署到目标环境' : '项目未配置发布命令，请先到交付与门禁设置'}>
                       <Icon name="play" size={12} />
                       {releasing === 'release' ? '发布中…' : '发布'}
                     </button>
-                    <button className="btn small" disabled={!project.rollbackCommand || releasing !== null || release?.status !== 'succeeded'} onClick={doRollback}>
+                    <button className="btn small" disabled={!project.rollbackCommand || releasing !== null || release?.status !== 'succeeded'} onClick={doRollback} data-tip={project.rollbackCommand ? '执行回滚命令，将目标环境恢复到上一个发布版本' : '项目未配置回滚命令，请先到交付与门禁设置'}>
                       <Icon name="refresh" size={12} />
                       {releasing === 'rollback' ? '回滚中…' : '回滚'}
                     </button>

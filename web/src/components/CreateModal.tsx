@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Icon } from '../icons';
+import { confirmAction } from './ConfirmDialog';
 
 export function CreateModal({
   projectName,
@@ -16,6 +17,17 @@ export function CreateModal({
   const [description, setDescription] = useState('');
   const [acceptanceCriteria, setAcceptanceCriteria] = useState('');
   const valid = title.trim().length > 0;
+
+  const submit = async () => {
+    const ok = await confirmAction({
+      title: '创建用户故事',
+      message: '故事将以草稿状态创建，需要经过 DoR 与人工批准后才能启动开发。',
+      detail: `${projectName}\n${title.trim()}`,
+      confirmText: '创建故事',
+    });
+    if (!ok) return;
+    onCreate({ title, description, acceptanceCriteria });
+  };
 
   return (
     <div className="modal-scrim" onClick={onClose}>
@@ -47,7 +59,7 @@ export function CreateModal({
         </div>
         <div className="modal-foot">
           <button className="btn ghost" onClick={onClose}>取消</button>
-          <button className="btn primary" disabled={!valid || busy} onClick={() => onCreate({ title, description, acceptanceCriteria })}>
+          <button className="btn primary" disabled={!valid || busy} onClick={() => void submit()}>
             <Icon name="plus" size={14} />
             创建故事
           </button>

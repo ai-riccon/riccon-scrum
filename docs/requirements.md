@@ -27,7 +27,7 @@
 | ID | 需求 | 验收标准 | 状态 | 实现证据 |
 | --- | --- | --- | --- | --- |
 | REQ-PROJ-001 | 新建项目 | 通过文件夹选择器选择本地目录，不要求已是 git 仓库；已有仓库自动探测当前分支，非 git 目录可后续一键创建本地仓库 | 已实现 | `server/src/db.ts`、`server/src/routes.ts`、`web/src/components/RegisterModal.tsx`、`FolderPickerModal.tsx` |
-| REQ-PROJ-002 | 项目级交付配置 | 可配置 agent 终端、团队模式、模型、术语表、DoD 命令、机器 DoD 要求、自动审批策略 | 已实现 | `server/src/db.ts`、`web/src/components/settings/SettingsProjectPanes.tsx` |
+| REQ-PROJ-002 | 项目级交付配置 | 可配置 agent 终端、团队模式、模型、思考强度、术语表、DoD 命令、机器 DoD 要求、自动审批策略 | 已实现 | `server/src/db.ts`、`web/src/components/settings/SettingsProjectPanes.tsx`、`web/src/components/settings/SettingsTerminalPane.tsx` |
 | REQ-PROJ-003 | 全局运行参数 | 可配置 WIP、轮次/墙钟/token 预算、空闲回收、默认终端；保存后立即生效 | 已实现 | `server/src/settings.ts`、`shared/src/index.ts`、`web/src/components/settings/SettingsGlobalPanes.tsx` |
 | REQ-PROJ-004 | 多项目切换 | 顶栏切换项目后，看板、设置、画像、搜索、指标切换到对应项目；顶栏展示项目名与当前分支，支持切换分支和创建本地仓库 | 已实现 | `web/src/App.tsx`、`web/src/components/TopBar.tsx`、`GitBranch.tsx` |
 | REQ-PROJ-005 | 配置项可解释 | 每个设置项有用途与影响说明 | 已实现 | `web/src/components/settings/*` |
@@ -80,6 +80,8 @@
 | REQ-ACP-007 | 会话可观测 | 记录终端、角色、模型、状态；事件流展示消息/工具/计划/用量 | 已实现 | `server/src/acp/runner.ts`、`server/src/acp/manager.ts`、`web/src/components/Drawer.tsx` |
 | REQ-ACP-008 | 启动失败可见 | 子进程启动失败发布 error 状态与原因，不静默挂起 | 已实现 | `server/src/acp/runner.ts` |
 | REQ-ACP-009 | 空闲回收 | 超过配置时长且无进行中提示的会话被停止 | 已实现 | `server/src/acp/manager.ts` |
+| REQ-ACP-010 | 终端管理 | 设置页展示每个终端的安装状态、命令路径与版本；检查 npm 最新版本并标记可更新；通过 ACP `initialize` + `session/new` 读取终端模型与 config options，`opencode` 额外合并 `opencode models` 目录 | 已实现 | `server/src/acp/terminal-info.ts`、`server/src/routes.ts`、`web/src/components/settings/SettingsTerminalPane.tsx` |
+| REQ-ACP-011 | 模型与思考强度 | 项目可钉住默认模型、发现模型与思考强度（`thought_level`）；新会话/恢复会话通过 ACP `session/set_config_option` 应用，不支持时不阻断并记录平台提示 | 已实现 | `server/src/acp/runner.ts`、`server/src/acp/config-options.ts`、`server/src/db.ts` |
 
 ## 7. 权限、隔离与安全
 
@@ -143,8 +145,10 @@
 | REQ-UI-003 | 通知 | DoD 结果、进入验收、完成、待审批产生 Toast | 已实现 | `web/src/App.tsx`、`web/src/components/Toasts.tsx` |
 | REQ-UI-004 | 搜索面板 | Ctrl/Cmd+K 打开，按符号/内容/文件搜索 | 已实现 | `web/src/components/SearchPalette.tsx`、`web/src/App.tsx` |
 | REQ-UI-005 | 项目画像 | 查看技术栈、架构文档、基线结果 | 已实现 | `web/src/components/ProfileModal.tsx` |
-| REQ-UI-006 | 设置页 | 左侧菜单分组（全局：运行参数/向量检索/任务执行；项目：项目配置/交付与门禁/知识库/项目归档），右侧展示对应配置项并逐项说明 | 已实现 | `web/src/components/SettingsPage.tsx`、`web/src/components/settings/*` |
+| REQ-UI-006 | 设置页 | 左侧菜单分组（全局：运行参数/向量检索/任务执行；终端：终端管理；项目：项目配置/交付与门禁/知识库/项目归档），右侧展示对应配置项并逐项说明 | 已实现 | `web/src/components/SettingsPage.tsx`、`web/src/components/settings/*` |
 | REQ-UI-007 | 一键启停 | 根目录 `start.cmd` / `stop.cmd` 管理开发服务 | 已实现 | `start.cmd`、`stop.cmd`、`scripts/dev-control.mjs` |
+| REQ-UI-008 | 项目概览首页 | 默认进入项目概览；展示项目身份与 Git 分支切换、交付 KPI、WIP、阻塞、待办审批、需求/变更、任务、质量/Bug、文档/一致性、流动与 DORA 度量、项目画像与索引、最近活动；项目切换与分支切换收敛到概览页；顶栏导航顺序为概览/需求/看板/Bug 反馈/项目文档/搜索框，设置固定右侧（图标+中文）；需求、Bug、项目文档、设置均作为主内容区页面打开并保留顶栏；新建故事入口位于用户故事看板工具栏 | 已实现 | `web/src/components/OverviewPage.tsx`、`web/src/components/ProjectSwitcher.tsx`、`web/src/App.tsx`、`web/src/components/TopBar.tsx` |
+| REQ-UI-009 | 统一交互反馈 | 需求/Bug/项目文档/设置页不提供返回或关闭按钮，统一由顶栏导航切换；按钮帮助提示只描述功能作用，不重复按钮名称（带文字按钮需显式 `data-tip`，图标按钮回退 `title`/`aria-label`）；所有状态变更操作（保存设置、故事动作、审批、Bug 流转、文档生成/同步/回滚、项目归档/删除、任务重试/跳过/重规划、依赖与标签变更等）执行前二次确认，提交后以 Toast 提示成功或失败 | 已实现 | `web/src/components/ConfirmDialog.tsx`、`web/src/components/HelpTips.tsx`、`web/src/App.tsx`、`web/src/styles.css` |
 
 ## 13. 非功能需求
 

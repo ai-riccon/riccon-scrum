@@ -252,6 +252,7 @@ Bug 反馈：
 | 入驻 | 技术栈扫描、代码索引、概览/代码图谱、架构文档、老项目需求基线、基线测试、自动 DoD 建议 |
 | 项目文档 | 10 类文档分类、版本/章节、AI/确定性生成、过期检测、人工发布/锁定/回滚、docs 同步、一致性与度量 |
 | 代码理解 | 文件/符号/import 索引、符号与内容搜索、代码图谱、上下文注入 |
+| 项目概览 | 默认首页：项目身份、项目/分支切换、KPI 与 WIP、阻塞与待办审批、交付流水线、需求/变更、任务、质量/Bug、文档/一致性、入驻画像与索引、最近活动 |
 | 故事看板 | 按状态分列、实时运行标记、抽屉详情、新建故事 |
 | 需求发现 | 对话式 intake → AI 草稿/拆分草案 → 人工反馈/确认 → 定向修订 → 版本对比 → 批准物化；DoR 清单与需求级度量 |
 | 需求/故事组织 | 需求 3 层父子层级；分类 ≤3 级；多标签；列表/看板/图筛选 |
@@ -270,7 +271,8 @@ Bug 反馈：
 | 质量门禁 | DoD 命令、文档变更检查、人工验收项、证据留存 |
 | 权限审批 | ACP 权限请求、分级自动批准、策略审计、冲突审批 |
 | 可观测性 | 事件流、实时转录、工具调用、计划、DoD 结果、指标 |
-| 设置 | 全局运行参数 + 项目交付参数（含术语表），逐项说明 |
+| 设置 | 全局运行参数 + 终端管理（版本/更新/已配置模型/思考强度）+ 项目交付参数（含术语表），逐项说明 |
+| 交互约定 | 顶栏常驻作为唯一页面导航（页面不再提供返回/关闭按钮）；按钮悬停提示只说明功能与影响，不重复按钮名称；状态变更操作统一二次确认，并在提交后以 Toast 提示成功或失败 |
 | 辅助 | 搜索面板、项目文档、流转指标、Toast 通知、刷新不回放提醒 |
 
 ## 8. 系统架构
@@ -299,8 +301,10 @@ server (Fastify + node:sqlite)
   ├─ onboard            入驻流水线
   └─ acp
        ├─ agents        终端适配（opencode/claude-code/qoder-cli）
-       ├─ runner        ACP 连接、提示、权限、事件
+       ├─ runner        ACP 连接、提示、权限、事件、模型/思考强度 config option
        ├─ manager       会话池、审批等待、空闲回收
+       ├─ config-options  ACP config option 解析（model / thought_level）
+       ├─ terminal-info 终端版本、更新检查、ACP 模型探测
        └─ policy        自动批准策略（纯函数）
           │
       ACP 子进程（agent 终端）
@@ -312,7 +316,7 @@ server (Fastify + node:sqlite)
 
 | 表 | 作用 | 关键字段 |
 | --- | --- | --- |
-| projects | 项目与交付配置 | repo_path, default_branch, dod_commands, agent_kind, team_mode, model, glossary, require_machine_dod, auto_approve_* |
+| projects | 项目与交付配置 | repo_path, default_branch, dod_commands, agent_kind, team_mode, model, discovery_model, thinking, glossary, require_machine_dod, auto_approve_* |
 | stories | 用户故事与执行位置 | status, acceptance_criteria, branch, worktree_path, requirement_id, category_id, source_version, source_version_id, source_story_key, source_clause |
 | story_tasks | 故事内部 Task | story_id, key, seq, title, files_json, ac_ids_json, verify_command, status, attempts, evidence, worktree_path, branch, tokens, source |
 | task_dependencies | Task Finish-to-Start DAG | task_id, depends_on_task_id；唯一约束 + 应用层环检测 |
@@ -378,6 +382,9 @@ server (Fastify + node:sqlite)
 | POST/GET | /api/projects/:id/index | 建立/查询代码索引 |
 | GET | /api/projects/:id/search | 代码搜索 |
 | GET | /api/settings | 全局设置与 agent 列表 |
+| GET | /api/terminals | 终端安装状态、版本、缓存模型与更新信息 |
+| POST | /api/terminals/:kind/probe | 通过 ACP 探测终端模型与 config options |
+| POST | /api/terminals/:kind/update-check | 查询 npm registry 最新版本 |
 | GET/POST/PUT/DELETE | /api/categories | 分类树 CRUD（≤3 级） |
 | GET/POST/DELETE | /api/tags | 标签 CRUD |
 | PUT | /api/requirements/:id/tags、/api/stories/:id/tags | 覆盖实体标签 |

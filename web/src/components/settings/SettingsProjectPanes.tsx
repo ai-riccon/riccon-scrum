@@ -7,18 +7,15 @@ import { Help, SaveBar } from './SettingsUi';
 
 const DOD_KINDS: DodCommand['kind'][] = ['test', 'build', 'lint', 'custom'];
 
-export function ProjectConfigPane({ project, agentKinds, onToast, onChanged }: ProjectConfigProps) {
-  const [agentKind, setAgentKind] = useState(project.agentKind);
+export function ProjectConfigPane({ project, onToast, onChanged }: ProjectConfigProps) {
   const [teamMode, setTeamMode] = useState(project.teamMode);
-  const [model, setModel] = useState(project.model);
-  const [discoveryModel, setDiscoveryModel] = useState(project.discoveryModel);
   const [glossary, setGlossary] = useState(project.glossary);
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
     setSaving(true);
     try {
-      await api.updateSettings(project.id, { agentKind, teamMode, model, discoveryModel, glossary });
+      await api.updateSettings(project.id, { teamMode, glossary });
       onToast('success', '项目设置已保存');
       await onChanged();
     } catch (err) {
@@ -41,35 +38,12 @@ export function ProjectConfigPane({ project, agentKinds, onToast, onChanged }: P
         </div>
       </div>
       <div className="field">
-        <label>Agent 终端（ACP）</label>
-        <div className="seg">
-          {agentKinds.map((k) => (
-            <button key={k} className={agentKind === k ? 'on' : ''} onClick={() => setAgentKind(k)}>
-              {k}
-            </button>
-          ))}
+        <label>Agent 终端与模型</label>
+        <div className="term-hint">
+          当前终端 <code>{project.agentKind}</code>，模型 <code>{project.model || '终端默认'}</code>，思考强度{' '}
+          <code>{project.thinking || '终端默认'}</code>。
         </div>
-        <Help>驱动该项目的编码终端。平台通过 ACP 协议编排，事件、审批、DoD 与 worktree 契约与终端无关。</Help>
-      </div>
-      <div className="field">
-        <label>模型（留空 = 终端默认）</label>
-        <input
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          placeholder="例如 deepseek-v4.1-flash 或留空"
-          style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5 }}
-        />
-        <Help>钉住模型以保证结果可复现。opencode 通过 OPENCODE_MODEL 注入；Qoder CLI 通过 ACP set_config_option 设置；留空则沿用终端当前的默认模型。</Help>
-      </div>
-      <div className="field">
-        <label>发现模型（需求/Critic，留空 = 交付模型）</label>
-        <input
-          value={discoveryModel}
-          onChange={(e) => setDiscoveryModel(e.target.value)}
-          placeholder="例如 opencode-go/deepseek-v4.1-flash"
-          style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5 }}
-        />
-        <Help>仅用于需求发现与 Critic；交付实现使用上方模型。可按阶段选择更强/更便宜的模型。</Help>
+        <Help>终端、默认模型、思考强度与发现模型统一在「终端管理」中维护，可查看版本、检查更新并读取终端已配置的模型。</Help>
       </div>
       <div className="field">
         <label>项目术语表（可选）</label>
@@ -92,7 +66,7 @@ export function ProjectConfigPane({ project, agentKinds, onToast, onChanged }: P
                 : '单 agent 直接实现，DoD 门禁通过后人工验收。'}
             </div>
           </div>
-          <button className={`switch ${teamMode ? 'on' : ''}`} onClick={() => setTeamMode(!teamMode)} aria-label="切换团队模式" />
+          <button className={`switch ${teamMode ? 'on' : ''}`} onClick={() => setTeamMode(!teamMode)} aria-label="切换团队模式" data-tip="开启后按 Lead 规划 → Dev 实现 → QA 评审 → 门禁四阶段编排" />
         </div>
         <Help>团队模式把规划、实现、评审拆成三个角色会话，交接只用计划、diff 与评审结论等工件，避免角色上下文互相污染。</Help>
       </div>
@@ -194,7 +168,7 @@ export function DeliveryPane({ project, onToast, onChanged }: ProjectPaneProps) 
             <div className="t">{requireMachineDod ? '已开启' : '已关闭'}</div>
             <div className="d">批准就绪时校验 BDD 验收标准与机器 DoD 命令。</div>
           </div>
-          <button className={`switch ${requireMachineDod ? 'on' : ''}`} onClick={() => setRequireMachineDod(!requireMachineDod)} aria-label="切换就绪门禁" />
+          <button className={`switch ${requireMachineDod ? 'on' : ''}`} onClick={() => setRequireMachineDod(!requireMachineDod)} aria-label="切换就绪门禁" data-tip="开启后，故事需 BDD 验收标准 + 至少一条机器 DoD 才能批准就绪" />
         </div>
         <Help>开启后，故事必须填写 BDD 验收标准，且项目至少有一条机器可验证 DoD 命令，才能从 Draft 批准为 Ready。关闭会让质量完全依赖人工验收。</Help>
       </div>
@@ -205,7 +179,7 @@ export function DeliveryPane({ project, onToast, onChanged }: ProjectPaneProps) 
             <div className="t">{autoApproveReads ? '自动放行 read/search' : '全部人工审批'}</div>
             <div className="d">读文件、检索类工具不打断人工；写、删除、网络仍需批准。</div>
           </div>
-          <button className={`switch ${autoApproveReads ? 'on' : ''}`} onClick={() => setAutoApproveReads(!autoApproveReads)} aria-label="切换只读自动审批" />
+          <button className={`switch ${autoApproveReads ? 'on' : ''}`} onClick={() => setAutoApproveReads(!autoApproveReads)} aria-label="切换只读自动审批" data-tip="只读工具自动放行；写文件、删除与网络请求仍需人工审批" />
         </div>
         <Help>每条自动批准都会写入审批记录（decidedBy=policy）可追溯，不会静默执行。</Help>
       </div>
@@ -239,12 +213,12 @@ export function DeliveryPane({ project, onToast, onChanged }: ProjectPaneProps) 
               style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5 }}
               onChange={(e) => patchDod(i, { command: e.target.value })}
             />
-            <button className="btn sm ghost" onClick={() => setDodCommands((rows) => rows.filter((_, idx) => idx !== i))} aria-label="删除 DoD 命令">
+            <button className="btn sm ghost" onClick={() => setDodCommands((rows) => rows.filter((_, idx) => idx !== i))} aria-label="删除 DoD 命令" data-tip="删除这条 DoD 命令，保存后生效">
               <Icon name="x" size={13} />
             </button>
           </div>
         ))}
-        <button className="btn sm" onClick={() => setDodCommands((rows) => [...rows, { kind: 'test', label: '', command: '' }])}>
+        <button className="btn sm" onClick={() => setDodCommands((rows) => [...rows, { kind: 'test', label: '', command: '' }])} data-tip="新增一条机器可验证的 DoD 命令，保存后生效">
           <Icon name="plus" size={13} />
           添加 DoD 命令
         </button>

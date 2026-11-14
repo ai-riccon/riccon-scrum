@@ -127,6 +127,7 @@ class AcpManager implements RunnerHost {
     role: AgentRole = 'solo',
     resumeSessionId?: string,
     model?: string,
+    thinking?: string,
   ): Promise<AgentSession> {
     const session = createSession(storyId, agentKind, role, model ?? null);
     const spec = getAgentSpec(agentKind, { model: model || config.agentModel, dbPath: config.opencodeDb });
@@ -138,6 +139,7 @@ class AcpManager implements RunnerHost {
       host: this,
       allowedRoots,
       model,
+      thinking,
     });
     this.runners.set(session.id, runner);
     this.touch(session.id);

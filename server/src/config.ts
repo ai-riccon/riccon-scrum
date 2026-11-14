@@ -3,11 +3,17 @@ import fs from 'node:fs';
 
 function resolveOpencodeBin(): string {
   if (process.env.OPENCODE_BIN) return process.env.OPENCODE_BIN;
-  if (process.platform === 'win32') {
-    const root = path.join(path.dirname(process.execPath), 'node_global', 'node_modules');
+  const roots = [
+    path.join(path.dirname(process.execPath), 'node_global', 'node_modules'),
+    path.join(path.dirname(process.execPath), 'node_modules'),
+    process.env.APPDATA ? path.join(process.env.APPDATA, 'npm', 'node_modules') : '',
+  ].filter(Boolean);
+  for (const root of roots) {
     const candidates = [
       path.join(root, '@opencode', 'cli', 'bin', 'opencode.exe'),
       path.join(root, 'opencode-ai', 'bin', 'opencode.exe'),
+      path.join(root, '@opencode', 'cli', 'bin', 'opencode'),
+      path.join(root, 'opencode-ai', 'bin', 'opencode'),
     ];
     for (const candidate of candidates) {
       if (fs.existsSync(candidate)) return candidate;

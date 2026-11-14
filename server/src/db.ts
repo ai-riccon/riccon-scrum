@@ -539,6 +539,7 @@ ensureColumn('projects', 'auto_approve_reads', 'auto_approve_reads INTEGER NOT N
 ensureColumn('projects', 'auto_approve_commands', "auto_approve_commands TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('projects', 'glossary', "glossary TEXT NOT NULL DEFAULT ''");
 ensureColumn('projects', 'discovery_model', "discovery_model TEXT NOT NULL DEFAULT ''");
+ensureColumn('projects', 'thinking', "thinking TEXT NOT NULL DEFAULT ''");
 ensureColumn('projects', 'release_command', "release_command TEXT NOT NULL DEFAULT ''");
 ensureColumn('projects', 'rollback_command', "rollback_command TEXT NOT NULL DEFAULT ''");
 ensureColumn('projects', 'contract_command', "contract_command TEXT NOT NULL DEFAULT ''");
@@ -587,6 +588,7 @@ export function createProject(input: {
   teamMode?: boolean;
   model?: string;
   discoveryModel?: string;
+  thinking?: string;
   glossary?: string;
   releaseCommand?: string;
   rollbackCommand?: string;
@@ -611,6 +613,7 @@ export function createProject(input: {
     teamMode: input.teamMode ?? false,
     model: input.model?.trim() ?? '',
     discoveryModel: input.discoveryModel?.trim() ?? '',
+    thinking: input.thinking?.trim() ?? '',
     glossary: input.glossary?.trim() ?? '',
     releaseCommand: input.releaseCommand?.trim() ?? '',
     rollbackCommand: input.rollbackCommand?.trim() ?? '',
@@ -624,7 +627,7 @@ export function createProject(input: {
     createdAt: now(),
   };
   db.prepare(
-    'INSERT INTO projects (id, workspace_id, name, repo_path, default_branch, dod_commands, agent_kind, team_mode, model, discovery_model, glossary, release_command, rollback_command, contract_command, policy_gates, require_machine_dod, auto_approve_reads, auto_approve_commands, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO projects (id, workspace_id, name, repo_path, default_branch, dod_commands, agent_kind, team_mode, model, discovery_model, thinking, glossary, release_command, rollback_command, contract_command, policy_gates, require_machine_dod, auto_approve_reads, auto_approve_commands, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   ).run(
     p.id,
     p.workspaceId,
@@ -636,6 +639,7 @@ export function createProject(input: {
     p.teamMode ? 1 : 0,
     p.model,
     p.discoveryModel,
+    p.thinking,
     p.glossary,
     p.releaseCommand,
     p.rollbackCommand,
@@ -662,6 +666,7 @@ export function getProject(id: string): Project {
     teamMode: Boolean(r.team_mode),
     model: (r.model as string) ?? '',
     discoveryModel: (r.discovery_model as string) ?? '',
+    thinking: (r.thinking as string) ?? '',
     glossary: (r.glossary as string) ?? '',
     releaseCommand: (r.release_command as string) ?? '',
     rollbackCommand: (r.rollback_command as string) ?? '',
@@ -683,6 +688,7 @@ export function updateProjectSettings(
     teamMode?: boolean;
     model?: string;
     discoveryModel?: string;
+    thinking?: string;
     glossary?: string;
     releaseCommand?: string;
     rollbackCommand?: string;
@@ -699,6 +705,7 @@ export function updateProjectSettings(
   const teamMode = patch.teamMode ?? cur.teamMode;
   const model = patch.model !== undefined ? patch.model.trim() : cur.model;
   const discoveryModel = patch.discoveryModel !== undefined ? patch.discoveryModel.trim() : cur.discoveryModel;
+  const thinking = patch.thinking !== undefined ? patch.thinking.trim() : cur.thinking;
   const glossary = patch.glossary !== undefined ? patch.glossary.trim() : cur.glossary;
   const releaseCommand = patch.releaseCommand !== undefined ? patch.releaseCommand.trim() : cur.releaseCommand;
   const rollbackCommand = patch.rollbackCommand !== undefined ? patch.rollbackCommand.trim() : cur.rollbackCommand;
@@ -709,12 +716,13 @@ export function updateProjectSettings(
   const autoApproveCommands = patch.autoApproveCommands ?? cur.autoApproveCommands;
   const dodCommands = patch.dodCommands ?? cur.dodCommands;
   db.prepare(
-    'UPDATE projects SET agent_kind = ?, team_mode = ?, model = ?, discovery_model = ?, glossary = ?, release_command = ?, rollback_command = ?, contract_command = ?, policy_gates = ?, require_machine_dod = ?, auto_approve_reads = ?, auto_approve_commands = ?, dod_commands = ? WHERE id = ?',
+    'UPDATE projects SET agent_kind = ?, team_mode = ?, model = ?, discovery_model = ?, thinking = ?, glossary = ?, release_command = ?, rollback_command = ?, contract_command = ?, policy_gates = ?, require_machine_dod = ?, auto_approve_reads = ?, auto_approve_commands = ?, dod_commands = ? WHERE id = ?',
   ).run(
     agentKind,
     teamMode ? 1 : 0,
     model,
     discoveryModel,
+    thinking,
     glossary,
     releaseCommand,
     rollbackCommand,

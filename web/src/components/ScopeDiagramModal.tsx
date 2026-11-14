@@ -66,7 +66,7 @@ export function ScopeDiagramModal({
           <Icon name="user" size={18} style={{ color: 'var(--cyan)', marginRight: 10 }} />
           <h3>用例图 · 需求范围</h3>
           <span className="badge">{requirement.title}</span>
-          <button className="btn icon ghost" onClick={onClose} aria-label="关闭" style={{ marginLeft: 'auto' }}>
+          <button className="btn icon ghost" onClick={onClose} aria-label="关闭" data-tip="关闭用例图弹窗" style={{ marginLeft: 'auto' }}>
             <Icon name="close" size={16} />
           </button>
         </div>

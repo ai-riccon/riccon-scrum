@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { RequirementSplitChild, RequirementSplitDraft } from '@riccon-scrum/shared';
 import { Icon } from '../icons';
+import { confirmAction } from './ConfirmDialog';
 
 interface EditableChild extends RequirementSplitChild {
   selected: boolean;
@@ -32,13 +33,20 @@ export function SplitDraftModal({
     setChildren((prev) => prev.map((child) => (child.key === key ? { ...child, ...patch } : child)));
   };
 
-  const confirm = () => {
+  const confirm = async () => {
     const payload = children
       .filter((child) => child.selected)
       .map(({ selected: _selected, ...child }) => ({
         ...child,
         dependsOn: child.dependsOn.filter((key) => selectedKeys.has(key)),
       }));
+    const ok = await confirmAction({
+      title: '确认拆分需求',
+      message: '将创建所选子需求，并写入依赖关系。',
+      detail: payload.map((child) => child.title).join('\n'),
+      confirmText: `创建 ${payload.length} 个子需求`,
+    });
+    if (!ok) return;
     onConfirm(payload);
   };
 
@@ -50,7 +58,7 @@ export function SplitDraftModal({
           <h3>拆分草案</h3>
           <span className="badge">{parentTitle}</span>
           <span className="badge cyan">已选 {selectedCount}/{children.length}</span>
-          <button className="btn icon ghost" onClick={onClose} aria-label="关闭" style={{ marginLeft: 'auto' }}>
+          <button className="btn icon ghost" onClick={onClose} aria-label="关闭" data-tip="关闭拆分草案，不创建子需求" style={{ marginLeft: 'auto' }}>
             <Icon name="close" size={16} />
           </button>
         </div>

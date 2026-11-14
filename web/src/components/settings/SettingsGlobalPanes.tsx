@@ -50,6 +50,7 @@ export function RuntimePane({ g, onChange, agentKinds, saving, onSave }: GlobalP
             className={`switch ${g.requireMachineDod ? 'on' : ''}`}
             onClick={() => onChange({ requireMachineDod: !g.requireMachineDod })}
             aria-label="默认就绪门禁"
+            data-tip="设置新项目是否默认要求 BDD 验收标准 + 至少一条机器 DoD"
           />
           <Help>新建项目是否默认要求「BDD 验收标准 + 至少一条机器 DoD」才能批准就绪；已有项目在项目设置中单独配置。</Help>
         </div>
@@ -58,7 +59,7 @@ export function RuntimePane({ g, onChange, agentKinds, saving, onSave }: GlobalP
         <label>新项目默认 Agent 终端</label>
         <div className="seg">
           {agentKinds.map((k) => (
-            <button key={k} className={g.defaultAgentKind === k ? 'on' : ''} onClick={() => onChange({ defaultAgentKind: k })}>
+            <button key={k} className={g.defaultAgentKind === k ? 'on' : ''} onClick={() => onChange({ defaultAgentKind: k })} data-tip={`新建项目默认使用 ${k} 作为 ACP 编码终端`}>
               {k}
             </button>
           ))}
@@ -122,6 +123,7 @@ export function TasksPane({ g, onChange, saving, onSave }: GlobalPaneProps) {
             className={`switch ${g.taskPlanning ? 'on' : ''}`}
             onClick={() => onChange({ taskPlanning: !g.taskPlanning })}
             aria-label="切换任务规划"
+            data-tip="启动故事时是否先让 AI 生成 2–8 个可排序的实现任务"
           />
           <Help>启动故事时先生成 2–8 个可排序的实现任务；关闭后降级为单任务执行，仍保留上下文注入与 DoD 门禁。</Help>
         </div>
@@ -165,6 +167,7 @@ export function TasksPane({ g, onChange, saving, onSave }: GlobalPaneProps) {
             className={`switch ${g.parallelTasks ? 'on' : ''}`}
             onClick={() => onChange({ parallelTasks: !g.parallelTasks })}
             aria-label="切换并行任务"
+            data-tip="开启后无依赖且文件不冲突的任务在独立 worktree 并行执行"
           />
           <Help>开启后，无依赖且文件不冲突的 Task 在独立 worktree 并行执行，完成后串行合并回故事分支；关闭时严格串行。</Help>
         </div>

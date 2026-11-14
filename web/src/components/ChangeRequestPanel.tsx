@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ChangeImpactAction, DocumentImpact, Requirement, RequirementChangeRequest } from '@riccon-scrum/shared';
 import { api } from '../api';
 import { Icon } from '../icons';
+import { confirmAction } from './ConfirmDialog';
 
 const TYPE_LABEL: Record<RequirementChangeRequest['changeType'], string> = {
   corrective: '修正',
@@ -70,6 +71,13 @@ export function ChangeRequestPanel({
       onToast('error', '请填写变更标题与原因');
       return;
     }
+    const ok = await confirmAction({
+      title: '创建需求变更单',
+      message: '将创建变更单并自动分析受影响的用户故事与文档。',
+      detail: title.trim(),
+      confirmText: '创建并分析',
+    });
+    if (!ok) return;
     setBusy('create');
     try {
       const created = await api.createRequirementChangeRequest(requirement.id, {
@@ -94,6 +102,19 @@ export function ChangeRequestPanel({
   };
 
   const decide = async (item: RequirementChangeRequest, status: 'approved' | 'rejected', decision?: 'revision' | 'increment') => {
+    const ok = await confirmAction({
+      title: status === 'approved' ? '批准变更单' : '拒绝变更单',
+      message:
+        status === 'approved'
+          ? decision === 'revision'
+            ? '批准为修订后会修改原始需求基线。'
+            : '批准为增量后会保留原基线并派生新需求。'
+          : '拒绝后该变更不再进入交付。',
+      detail: item.title,
+      confirmText: status === 'approved' ? '确认批准' : '确认拒绝',
+      tone: status === 'approved' ? 'default' : 'warning',
+    });
+    if (!ok) return;
     setBusy(item.id);
     try {
       await api.decideChangeRequest(item.id, { status, decision });
@@ -108,6 +129,13 @@ export function ChangeRequestPanel({
   };
 
   const materialize = async (item: RequirementChangeRequest) => {
+    const ok = await confirmAction({
+      title: '物化派生需求',
+      message: '将根据变更影响分析创建新的派生需求。',
+      detail: item.title,
+      confirmText: '创建派生需求',
+    });
+    if (!ok) return;
     setBusy(item.id);
     try {
       const result = await api.materializeChangeRequest(item.id);
@@ -127,6 +155,7 @@ export function ChangeRequestPanel({
     try {
       const next = await api.updateChangeImpact(item.id, storyId, action);
       setItems((prev) => prev.map((entry) => (entry.id === next.id ? next : entry)));
+      onToast('success', '故事影响处理方式已更新');
     } catch (err) {
       onToast('error', err instanceof Error ? err.message : String(err));
     } finally {
@@ -211,19 +240,19 @@ export function ChangeRequestPanel({
           <div className="req-actions">
             {item.status === 'in_review' && (
               <>
-                <button className="btn small cyan" disabled={busy === item.id} onClick={() => void decide(item, 'approved', 'increment')}>
+                <button className="btn small cyan" disabled={busy === item.id} onClick={() => void decide(item, 'approved', 'increment')} data-tip="保留原需求基线，派生新需求承接本次变更">
                   批准为增量
                 </button>
-                <button className="btn small" disabled={busy === item.id} onClick={() => void decide(item, 'approved', 'revision')}>
+                <button className="btn small" disabled={busy === item.id} onClick={() => void decide(item, 'approved', 'revision')} data-tip="直接修改原需求基线，后续以修订版为准">
                   批准为修订
                 </button>
-                <button className="btn small ghost" disabled={busy === item.id} onClick={() => void decide(item, 'rejected')}>
+                <button className="btn small ghost" disabled={busy === item.id} onClick={() => void decide(item, 'rejected')} data-tip="拒绝该变更单，不进入后续交付">
                   拒绝
                 </button>
               </>
             )}
             {item.status === 'approved' && (
-              <button className="btn small primary" disabled={busy === item.id} onClick={() => void materialize(item)}>
+              <button className="btn small primary" disabled={busy === item.id} onClick={() => void materialize(item)} data-tip="根据影响分析创建新的派生需求">
                 <Icon name="check" size={12} />
                 物化派生需求
               </button>

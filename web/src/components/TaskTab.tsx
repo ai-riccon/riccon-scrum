@@ -3,6 +3,7 @@ import type { StoryTask, StoryTaskMetrics, StoryTaskPlan } from '@riccon-scrum/s
 import { api } from '../api';
 import { Icon } from '../icons';
 import { TASK_STATUS_META, timeOf } from '../ui';
+import { confirmAction } from './ConfirmDialog';
 
 export function TaskTab({
   storyId,
@@ -71,6 +72,13 @@ export function TaskTab({
 
   const saveEdit = async () => {
     if (!editing) return;
+    const ok = await confirmAction({
+      title: '保存任务修改',
+      message: '将更新任务描述、文件范围、验收标准与验证命令。',
+      detail: `${editing.key} · ${form.title.trim()}`,
+      confirmText: '保存任务',
+    });
+    if (!ok) return;
     setLoading(true);
     try {
       const next = await api.updateStoryTask(storyId, editing.id, {
@@ -93,6 +101,14 @@ export function TaskTab({
   };
 
   const retry = async (task: StoryTask) => {
+    const ok = await confirmAction({
+      title: '重试任务',
+      message: '任务会被重置为待执行，随后需要点击「继续」重新运行。',
+      detail: `${task.key} · ${task.title}`,
+      confirmText: '重置任务',
+      tone: 'warning',
+    });
+    if (!ok) return;
     setLoading(true);
     try {
       await api.retryStoryTask(storyId, task.id);
@@ -108,6 +124,14 @@ export function TaskTab({
   const skip = async (task: StoryTask) => {
     const reason = window.prompt(`跳过任务 ${task.key} 的原因（会记录审计）`);
     if (!reason?.trim()) return;
+    const ok = await confirmAction({
+      title: '跳过任务',
+      message: '跳过会记录审计原因，且该任务不再计入完成条件。',
+      detail: `${task.key} · ${task.title}\n原因：${reason.trim()}`,
+      confirmText: '确认跳过',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setLoading(true);
     try {
       await api.skipStoryTask(storyId, task.id, reason.trim());
@@ -121,7 +145,14 @@ export function TaskTab({
   };
 
   const replan = async () => {
-    if (!window.confirm('只有未完成的任务会被替换，已完成任务会保留。继续？')) return;
+    const ok = await confirmAction({
+      title: '重新规划剩余任务',
+      message: '只有未完成的任务会被替换，已完成任务会保留。',
+      detail: `当前计划 ${plan?.tasks.length ?? 0} 个任务`,
+      confirmText: '重新规划',
+      tone: 'warning',
+    });
+    if (!ok) return;
     setLoading(true);
     try {
       const failure = plan?.tasks.find((task) => task.status === 'failed')?.evidence ?? '';
@@ -170,6 +201,7 @@ export function TaskTab({
           style={{ marginLeft: 'auto' }}
           disabled={loading || plan.tasks.some((task) => task.status === 'in_progress') || ['review', 'done'].includes(storyStatus)}
           onClick={() => void replan()}
+          data-tip="让 AI 重排未完成任务，已完成任务保留"
         >
           <Icon name="refresh" size={12} />
           重规划剩余
@@ -205,19 +237,19 @@ export function TaskTab({
             {task.evidence && <pre className="task-evidence">{task.evidence}</pre>}
             <div className="task-actions">
               {['failed', 'skipped'].includes(task.status) && (
-                <button className="btn small" disabled={loading} onClick={() => void retry(task)}>
+                <button className="btn small" disabled={loading} onClick={() => void retry(task)} data-tip="把失败或跳过的任务重置为待执行">
                   <Icon name="refresh" size={12} />
                   重试
                 </button>
               )}
               {!['done', 'skipped'].includes(task.status) && (
-                <button className="btn small ghost" disabled={loading} onClick={() => void skip(task)}>
+                <button className="btn small ghost" disabled={loading} onClick={() => void skip(task)} data-tip="跳过该任务并记录审计原因，不计入完成条件">
                   <Icon name="x" size={12} />
                   跳过
                 </button>
               )}
               {!['done', 'in_progress'].includes(task.status) && (
-                <button className="btn small ghost" disabled={loading} onClick={() => startEdit(task)}>
+                <button className="btn small ghost" disabled={loading} onClick={() => startEdit(task)} data-tip="手工修改任务描述、文件范围、验收标准与验证命令">
                   <Icon name="code" size={12} />
                   编辑
                 </button>

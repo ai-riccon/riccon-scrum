@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Icon } from '../icons';
 import { FolderPickerModal } from './FolderPickerModal';
+import { confirmAction } from './ConfirmDialog';
 
 export interface RegisterInput {
   name: string;
@@ -83,7 +84,16 @@ export function RegisterModal({
             <button
               className="btn primary"
               disabled={!valid || busy}
-              onClick={() => onRegister({ name: name.trim(), repoPath: repoPath.trim(), agentKind, teamMode })}
+              onClick={async () => {
+                const ok = await confirmAction({
+                  title: '创建项目',
+                  message: '将监听代码文件夹并初始化项目数据、Git 分支与平台配置。',
+                  detail: `${name.trim()}\n${repoPath.trim()}\n终端：${agentKind} · ${teamMode ? '团队模式' : 'Solo 模式'}`,
+                  confirmText: '创建项目',
+                });
+                if (!ok) return;
+                onRegister({ name: name.trim(), repoPath: repoPath.trim(), agentKind, teamMode });
+              }}
             >
               <Icon name="plus" size={14} />
               新建项目

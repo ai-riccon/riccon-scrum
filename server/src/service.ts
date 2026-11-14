@@ -142,6 +142,7 @@ export async function resumeStory(storyId: string, message: string): Promise<{ s
     prior?.role ?? 'solo',
     prior?.acpSessionId ?? undefined,
     project.model || undefined,
+    project.thinking || undefined,
   );
 
   if (hasTasks) {

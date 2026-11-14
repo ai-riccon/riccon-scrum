@@ -46,6 +46,7 @@ function StoryCard({
         {story.status === 'draft' && (
           <button
             className="btn sm"
+            data-tip="批准故事进入就绪状态，之后可启动 agent 开发"
             onClick={(e) => {
               e.stopPropagation();
               onAction('approve');
@@ -58,6 +59,7 @@ function StoryCard({
         {story.status === 'ready' && (
           <button
             className="btn sm cyan"
+            data-tip="创建任务计划并启动 agent 开发该故事"
             onClick={(e) => {
               e.stopPropagation();
               onAction('start');
@@ -70,6 +72,7 @@ function StoryCard({
         {story.status === 'review' && (
           <button
             className="btn sm amber"
+            data-tip="验收通过并将故事分支合并到主分支"
             onClick={(e) => {
               e.stopPropagation();
               onAction('accept');

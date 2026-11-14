@@ -25,6 +25,7 @@ export async function runReadOnlyPrompt(input: {
     host: readOnlyHost(input.streamId),
     allowedRoots: [cwd],
     model: model || undefined,
+    thinking: input.project.thinking || undefined,
   });
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {

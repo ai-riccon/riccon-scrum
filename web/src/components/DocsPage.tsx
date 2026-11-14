@@ -10,6 +10,8 @@ import type {
 import { api, type DocumentLive } from '../api';
 import { Icon } from '../icons';
 import { Markdown } from './Markdown';
+import { confirmAction } from './ConfirmDialog';
+import type { ConfirmOptions } from './ConfirmDialog';
 
 const DOC_TYPES: { type: DocumentType; label: string }[] = [
   { type: 'overview', label: '项目概览' },
@@ -106,6 +108,14 @@ export function DocsPage({
   }, [onboarding, profileStatus, project.id, refreshList, onToast]);
 
   const startOnboard = async () => {
+    const ok = await confirmAction({
+      title: profileStatus === 'done' ? '重新入驻项目' : '入驻分析',
+      message: '将扫描技术栈、索引代码，并生成概览/架构/代码图谱/需求基线文档。',
+      detail: `项目：${project.name}\n已有生成文档会按版本规则更新。`,
+      confirmText: profileStatus === 'done' ? '重新入驻' : '开始入驻',
+      tone: profileStatus === 'done' ? 'warning' : 'default',
+    });
+    if (!ok) return;
     setOnboarding(true);
     setBusy('onboard');
     try {
@@ -170,6 +180,13 @@ export function DocsPage({
 
   const generateType = async () => {
     if (activeType === 'all') return;
+    const ok = await confirmAction({
+      title: '生成该类文档',
+      message: '将为当前文档类型生成新的文档版本。',
+      detail: `项目：${project.name}\n类型：${DOC_TYPES.find((item) => item.type === activeType)?.label ?? activeType}`,
+      confirmText: '开始生成',
+    });
+    if (!ok) return;
     setGeneratingType(activeType);
     setBusy(`generate-${activeType}`);
     try {
@@ -206,6 +223,15 @@ export function DocsPage({
     [onToast, refreshDetail, refreshList, selectedId],
   );
 
+  const confirmRun = useCallback(
+    async (options: ConfirmOptions, name: string, fn: () => Promise<unknown>, success: string) => {
+      const ok = await confirmAction(options);
+      if (!ok) return;
+      await run(name, fn, success);
+    },
+    [run],
+  );
+
   const startEdit = () => {
     if (!detail) return;
     setEditContent(detail.document.content);
@@ -215,6 +241,14 @@ export function DocsPage({
 
   const saveEdit = async () => {
     if (!detail) return;
+    const ok = await confirmAction({
+      title: '保存文档修改',
+      message: '保存后文档将标记为人工锁定，不再随代码自动更新。',
+      detail: detail.document.title,
+      confirmText: '保存为草稿',
+      tone: 'warning',
+    });
+    if (!ok) return;
     await run(
       'save',
       () => api.updateDocument(detail.document.id, { content: editContent, title: editTitle }),
@@ -225,6 +259,14 @@ export function DocsPage({
 
   const regenerate = async () => {
     if (!detail) return;
+    const ok = await confirmAction({
+      title: '重新生成文档',
+      message: '将生成新的文档版本，当前文档内容会被更新。',
+      detail: `${detail.document.title}\n当前版本：v${detail.document.version}`,
+      confirmText: '重新生成',
+      tone: 'warning',
+    });
+    if (!ok) return;
     await run('regen', () => api.regenerateDocument(detail.document.id), '已开始重新生成');
     if (detail.document.docType === 'architecture' || detail.document.docType === 'database' || detail.document.docType === 'api-contract' || detail.document.docType === 'coding-standards' || detail.document.docType === 'test-strategy' || detail.document.docType === 'operations' || detail.document.docType === 'security' || (detail.document.docType === 'requirements' && detail.document.slug === 'legacy-baseline')) {
       setTimeout(() => {
@@ -248,6 +290,14 @@ export function DocsPage({
   };
 
   const applySync = async (force: boolean) => {
+    const ok = await confirmAction({
+      title: force ? '强制覆盖冲突文件' : '应用文档同步',
+      message: force ? '冲突文件会被强制覆盖，目标目录中的本地修改将丢失。' : '将把文档写入目标目录，冲突文件会被跳过。',
+      detail: `目标目录：${syncDir}\n新增 ${syncPreview?.summary.new ?? 0} · 修改 ${syncPreview?.summary.modified ?? 0} · 冲突 ${syncPreview?.summary.conflict ?? 0}`,
+      confirmText: force ? '强制覆盖' : '应用同步',
+      tone: force ? 'danger' : 'warning',
+    });
+    if (!ok) return;
     setBusy('sync-apply');
     try {
       const result = await api.applyDocumentSync(project.id, { dir: syncDir, force });
@@ -275,6 +325,17 @@ export function DocsPage({
     }
   };
 
+  const refreshDocs = async () => {
+    const ok = await confirmAction({
+      title: '刷新文档与索引',
+      message: '将重新扫描代码变更并更新文档索引与过期状态。',
+      detail: `项目：${project.name}`,
+      confirmText: '开始刷新',
+    });
+    if (!ok) return;
+    await run('refresh', () => api.refreshDocuments(project.id), '文档与索引已刷新');
+  };
+
   const doc = detail?.document;
   const running = detail?.job?.status === 'running';
 
@@ -289,26 +350,22 @@ export function DocsPage({
           {profileRunning || onboarding ? (
             <span className="badge cyan">入驻分析中…</span>
           ) : (
-            <button className="btn ghost" disabled={busy === 'onboard'} onClick={() => void startOnboard()}>
+            <button className="btn ghost" disabled={busy === 'onboard'} onClick={() => void startOnboard()} data-tip="扫描技术栈、索引代码并生成概览/架构/代码图谱/需求基线文档">
               <Icon name="sparkles" size={14} />
               {profileStatus === 'done' ? '重新入驻' : '入驻分析'}
             </button>
           )}
-          <button className="btn ghost" disabled={busy === 'refresh'} onClick={() => void run('refresh', () => api.refreshDocuments(project.id), '文档与索引已刷新')}>
+          <button className="btn ghost" disabled={busy === 'refresh'} onClick={() => void refreshDocs()} data-tip="重新扫描代码变更，更新文档索引、过期状态与自动更新项">
             <Icon name="refresh" size={14} />
             刷新文档
           </button>
-          <button className="btn ghost" onClick={() => void previewSync()} disabled={busy === 'sync-preview'}>
+          <button className="btn ghost" onClick={() => void previewSync()} disabled={busy === 'sync-preview'} data-tip="先预览新增/修改/冲突文件，确认后再写入项目 docs 目录">
             <Icon name="file" size={14} />
             同步 docs
           </button>
-          <button className="btn ghost" onClick={() => void checkConsistency()} disabled={busy === 'consistency'}>
+          <button className="btn ghost" onClick={() => void checkConsistency()} disabled={busy === 'consistency'} data-tip="检查文档与代码、API 契约、数据库结构之间的一致性问题">
             <Icon name="shield" size={14} />
             一致性检查
-          </button>
-          <button className="btn ghost" onClick={onClose}>
-            <Icon name="x" size={14} />
-            返回
           </button>
         </div>
 
@@ -348,10 +405,10 @@ export function DocsPage({
             ))}
             <div className="docs-panel-actions">
               <input value={syncDir} onChange={(e) => setSyncDir(e.target.value)} aria-label="同步目录" />
-              <button className="btn small ghost" onClick={() => void previewSync()} disabled={busy === 'sync-preview'}>重新预览</button>
-              <button className="btn small primary" onClick={() => void applySync(false)} disabled={busy === 'sync-apply'}>应用（跳过冲突）</button>
+              <button className="btn small ghost" onClick={() => void previewSync()} disabled={busy === 'sync-preview'} data-tip="按当前目录重新计算待同步文件与冲突">重新预览</button>
+              <button className="btn small primary" onClick={() => void applySync(false)} disabled={busy === 'sync-apply'} data-tip="把文档写入目标目录，冲突文件将被跳过">应用（跳过冲突）</button>
               {syncPreview.summary.conflict > 0 && (
-                <button className="btn small ghost" onClick={() => void applySync(true)} disabled={busy === 'sync-apply'}>强制覆盖冲突</button>
+                <button className="btn small ghost" onClick={() => void applySync(true)} disabled={busy === 'sync-apply'} data-tip="强制覆盖冲突文件，目标目录中的本地修改会丢失">强制覆盖冲突</button>
               )}
             </div>
           </div>
@@ -409,7 +466,7 @@ export function DocsPage({
               <div className="docs-empty-generate">
                 <Icon name="sparkles" size={24} style={{ color: 'var(--cyan)' }} />
                 <p>当前项目还没有「{DOC_TYPES.find((item) => item.type === activeType)?.label}」文档。</p>
-                <button className="btn primary" onClick={() => void generateType()} disabled={!!busy || !!generatingType}>
+                <button className="btn primary" onClick={() => void generateType()} disabled={!!busy || !!generatingType} data-tip="为当前文档类型生成新的文档版本">
                   <Icon name="sparkles" size={14} />
                   {generatingType === activeType ? '生成中…' : '生成该类文档'}
                 </button>
@@ -432,16 +489,16 @@ export function DocsPage({
                     </div>
                   </div>
                   <div className="docs-actions">
-                    <button className="btn small primary" onClick={() => void regenerate()} disabled={running || !!busy}>
+                    <button className="btn small primary" onClick={() => void regenerate()} disabled={running || !!busy} data-tip="按当前代码重新生成该文档的新版本">
                       <Icon name="sparkles" size={13} />
                       {running ? '生成中…' : '重新生成'}
                     </button>
                     {running && (
-                      <button className="btn small ghost" onClick={() => void run('cancel', () => api.cancelDocument(doc.id), '已请求取消')}>
+                      <button className="btn small ghost" onClick={() => void confirmRun({ title: '取消文档生成', message: '将请求停止当前文档生成任务。', detail: doc.title, confirmText: '取消生成', tone: 'warning' }, 'cancel', () => api.cancelDocument(doc.id), '已请求取消')} data-tip="停止当前文档生成任务，已生成内容会保留">
                         取消
                       </button>
                     )}
-                    {!editing && <button className="btn small ghost" onClick={startEdit}>编辑</button>}
+                    {!editing && <button className="btn small ghost" onClick={startEdit} data-tip="手工编辑文档内容，保存后转为草稿并锁定">编辑</button>}
                     {editing && (
                       <>
                         <button className="btn small primary" onClick={() => void saveEdit()} disabled={busy === 'save'}>保存</button>
@@ -449,12 +506,12 @@ export function DocsPage({
                       </>
                     )}
                     {doc.status !== 'published' && (
-                      <button className="btn small ghost" onClick={() => void run('publish', () => api.publishDocument(doc.id), '文档已发布')}>发布</button>
+                      <button className="btn small ghost" onClick={() => void confirmRun({ title: '发布文档', message: '发布后该文档对团队可见，并参与一致性检查。', detail: doc.title, confirmText: '确认发布' }, 'publish', () => api.publishDocument(doc.id), '文档已发布')} data-tip="发布后对团队可见，并参与一致性检查">发布</button>
                     )}
-                    <button className="btn small ghost" onClick={() => void run('pin', () => api.pinDocument(doc.id, !doc.pinned), doc.pinned ? '已解锁' : '已锁定')}>
+                    <button className="btn small ghost" onClick={() => void confirmRun({ title: doc.pinned ? '解除文档锁定' : '锁定文档', message: doc.pinned ? '解锁后文档会重新参与自动更新。' : '锁定后文档不再随代码自动更新。', detail: doc.title, confirmText: doc.pinned ? '解除锁定' : '锁定文档', tone: 'warning' }, 'pin', () => api.pinDocument(doc.id, !doc.pinned), doc.pinned ? '已解锁' : '已锁定')} data-tip={doc.pinned ? '解除人工锁定，文档重新参与自动更新' : '人工锁定文档，停止随代码自动更新'}>
                       {doc.pinned ? '解锁' : '锁定'}
                     </button>
-                    <button className="btn small ghost" onClick={() => setShowVersions((v) => !v)}>版本历史</button>
+                    <button className="btn small ghost" onClick={() => setShowVersions((v) => !v)} data-tip="展开或收起该文档的历史版本与回滚入口">版本历史</button>
                   </div>
                 </div>
 
@@ -497,8 +554,10 @@ export function DocsPage({
                         <button
                           className="btn small ghost"
                           disabled={version.version === doc.version || !!busy}
+                          data-tip="以该历史版本内容创建新草稿，当前版本保留在版本历史中"
                           onClick={() =>
-                            void run(
+                            void confirmRun(
+                              { title: '回滚文档版本', message: '回滚会以该版本内容创建新草稿，当前内容保留在版本历史中。', detail: `${doc.title}\n目标版本：v${version.version}`, confirmText: '回滚到此版', tone: 'warning' },
                               `rollback-${version.version}`,
                               () => api.rollbackDocument(doc.id, version.version),
                               `已回滚到 v${version.version}（新草稿）`,

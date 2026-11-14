@@ -9,6 +9,7 @@ import type {
 } from '@riccon-scrum/shared';
 import { api, type BoardStory } from '../api';
 import { Icon } from '../icons';
+import { confirmAction, type ConfirmOptions } from './ConfirmDialog';
 
 const STATUS_LABEL: Record<BugReport['status'], string> = {
   new: '待分诊',
@@ -119,6 +120,12 @@ export function BugInbox({
     }
   };
 
+  const confirmRun = async (options: ConfirmOptions, key: string, fn: () => Promise<unknown>, success: string) => {
+    const ok = await confirmAction(options);
+    if (!ok) return;
+    await run(key, fn, success);
+  };
+
   const suggest = async () => {
     if (!selected) return;
     setBusy('suggest');
@@ -138,6 +145,13 @@ export function BugInbox({
 
   const saveTriage = async () => {
     if (!selected) return;
+    const ok = await confirmAction({
+      title: '保存 Bug 分诊结果',
+      message: '将更新严重度、优先级、可复现性并写入分诊备注。',
+      detail: `${selected.title}\n${severity} · ${priority} · ${reproducibility}${duplicateOf ? `\n重复于 ${duplicateOf}` : ''}`,
+      confirmText: '保存分诊',
+    });
+    if (!ok) return;
     await run(
       'triage',
       () =>
@@ -154,6 +168,20 @@ export function BugInbox({
 
   const accept = async (strategy?: 'rework' | 'fix_story') => {
     if (!selected) return;
+    const kind = strategy === 'rework' ? '关联当前故事返工' : strategy === 'fix_story' ? '创建修复故事' : '接受并创建修复工作项';
+    const ok = await confirmAction({
+      title: `接受 Bug：${kind}`,
+      message:
+        strategy === 'rework'
+          ? '当前故事将退回开发中，由 agent 按 Bug 描述修复。'
+          : strategy === 'fix_story'
+            ? '将创建一个草稿修复故事，需批准后执行。'
+            : '将自动选择修复策略并创建对应工作项。',
+      detail: `${selected.title}\n严重度 ${selected.severity} · 优先级 ${selected.priority}`,
+      confirmText: '确认接受',
+      tone: strategy === 'rework' ? 'warning' : 'default',
+    });
+    if (!ok) return;
     setBusy('accept');
     try {
       const result = await api.acceptBug(selected.id, { regressionTest: regressionTest.trim() || undefined, strategy });
@@ -182,10 +210,6 @@ export function BugInbox({
           <h2>Bug 反馈</h2>
           <span className="badge">{project.name}</span>
           <span className="spacer" />
-          <button className="btn ghost" onClick={onClose}>
-            <Icon name="x" size={14} />
-            返回
-          </button>
         </div>
         <div className="settings-body">
           <div className="bug-metrics">
@@ -265,11 +289,11 @@ export function BugInbox({
                       <input value={duplicateOf} onChange={(e) => setDuplicateOf(e.target.value)} placeholder="重复 Bug ID（可选，填写后标记为 duplicate）" />
                       <textarea value={triageNote} onChange={(e) => setTriageNote(e.target.value)} placeholder="分诊备注" />
                       <div className="req-actions">
-                        <button className="btn small" disabled={busy === 'suggest'} onClick={() => void suggest()}>
+                        <button className="btn small" disabled={busy === 'suggest'} onClick={() => void suggest()} data-tip="用规则与相似 Bug 生成分诊建议，需人工确认后保存">
                           <Icon name="sparkles" size={12} />
                           {busy === 'suggest' ? '分析中…' : '生成规则/重复建议'}
                         </button>
-                        <button className="btn small cyan" disabled={busy === 'triage'} onClick={() => void saveTriage()}>
+                        <button className="btn small cyan" disabled={busy === 'triage'} onClick={() => void saveTriage()} data-tip="保存严重度、优先级、可复现性与重复标记">
                           保存分诊
                         </button>
                       </div>
@@ -296,14 +320,14 @@ export function BugInbox({
                       <div className="section-label">接受与修复</div>
                       <input value={regressionTest} onChange={(e) => setRegressionTest(e.target.value)} placeholder="回归测试名（修复故事 AC 必填）" />
                       <div className="req-actions">
-                        <button className="btn small cyan" disabled={busy === 'accept'} onClick={() => void accept()}>
+                        <button className="btn small cyan" disabled={busy === 'accept'} onClick={() => void accept()} data-tip="接受 Bug 并自动选择返工或创建修复故事">
                           <Icon name="play" size={12} />
                           接受并创建修复工作项
                         </button>
-                        <button className="btn small ghost" disabled={busy === 'accept'} onClick={() => void accept('rework')}>
+                        <button className="btn small ghost" disabled={busy === 'accept'} onClick={() => void accept('rework')} data-tip="把当前故事退回开发，由 agent 修复该 Bug">
                           关联当前故事返工
                         </button>
-                        <button className="btn small ghost" disabled={busy === 'accept'} onClick={() => void accept('fix_story')}>
+                        <button className="btn small ghost" disabled={busy === 'accept'} onClick={() => void accept('fix_story')} data-tip="新建草稿修复故事，批准后进入交付">
                           创建修复故事
                         </button>
                       </div>
@@ -313,7 +337,7 @@ export function BugInbox({
                   {selected.status === 'fixed' && (
                     <div className="bug-section">
                       <input value={resolution} onChange={(e) => setResolution(e.target.value)} placeholder="验证结论" />
-                      <button className="btn small green" disabled={busy === 'verify'} onClick={() => void run('verify', () => api.verifyBug(selected.id, resolution), 'Bug 已验证')}>
+                      <button className="btn small green" disabled={busy === 'verify'} onClick={() => void confirmRun({ title: '人工验证通过', message: '验证通过后 Bug 进入已验证状态，可继续关闭。', detail: selected.title, confirmText: '验证通过' }, 'verify', () => api.verifyBug(selected.id, resolution), 'Bug 已验证')} data-tip="确认修复有效，Bug 进入已验证状态">
                         人工验证通过
                       </button>
                     </div>
@@ -321,7 +345,7 @@ export function BugInbox({
                   {selected.status === 'verified' && (
                     <div className="bug-section">
                       <input value={resolution} onChange={(e) => setResolution(e.target.value)} placeholder="关闭结论" />
-                      <button className="btn small green" disabled={busy === 'close'} onClick={() => void run('close', () => api.closeBug(selected.id, resolution), 'Bug 已关闭')}>
+                      <button className="btn small green" disabled={busy === 'close'} onClick={() => void confirmRun({ title: '关闭 Bug', message: '关闭后该 Bug 进入已关闭状态，可在需要时重开。', detail: selected.title, confirmText: '关闭 Bug' }, 'close', () => api.closeBug(selected.id, resolution), 'Bug 已关闭')} data-tip="确认问题已解决，关闭该 Bug；之后仍可重开">
                         关闭 Bug
                       </button>
                     </div>
@@ -329,7 +353,7 @@ export function BugInbox({
                   {['fixed', 'verified', 'closed'].includes(selected.status) && (
                     <div className="bug-section">
                       <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="重开原因（可选）" />
-                      <button className="btn small ghost" disabled={!reason.trim() || busy === 'reopen'} onClick={() => void run('reopen', () => api.reopenBug(selected.id, reason), 'Bug 已重开')}>
+                      <button className="btn small ghost" disabled={!reason.trim() || busy === 'reopen'} onClick={() => void confirmRun({ title: '重开 Bug', message: 'Bug 将回到修复流程，需要重新验证。', detail: `${selected.title}\n${reason}`, confirmText: '确认重开', tone: 'warning' }, 'reopen', () => api.reopenBug(selected.id, reason), 'Bug 已重开')} data-tip="把 Bug 退回修复流程，需要重新修复并验证">
                         重开 Bug
                       </button>
                     </div>
@@ -337,7 +361,7 @@ export function BugInbox({
                   {!['closed', 'rejected'].includes(selected.status) && (
                     <div className="bug-section">
                       <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="拒绝原因（可选）" />
-                      <button className="btn small ghost" disabled={!reason.trim() || busy === 'reject'} onClick={() => void run('reject', () => api.rejectBug(selected.id, reason), 'Bug 已拒绝')}>
+                      <button className="btn small ghost" disabled={!reason.trim() || busy === 'reject'} onClick={() => void confirmRun({ title: '拒绝 Bug', message: '拒绝后 Bug 不再进入修复流程，请确认拒绝原因。', detail: `${selected.title}\n${reason}`, confirmText: '确认拒绝', tone: 'danger' }, 'reject', () => api.rejectBug(selected.id, reason), 'Bug 已拒绝')} data-tip="判定为不修复或非缺陷，终止该 Bug 的修复流程">
                         拒绝 Bug
                       </button>
                     </div>

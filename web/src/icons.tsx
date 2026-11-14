@@ -101,6 +101,12 @@ const paths: Record<string, React.ReactNode> = {
     </>
   ),
   list: <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />,
+  home: (
+    <>
+      <path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V10z" />
+      <path d="M9 22V12h6v10" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof paths;

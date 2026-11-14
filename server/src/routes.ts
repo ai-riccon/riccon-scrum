@@ -70,6 +70,7 @@ import {
 import { initRepo, repoState, switchBranch } from './git';
 import { manager } from './acp/manager';
 import { AGENT_KINDS } from './acp/agents';
+import { checkTerminalUpdate, listTerminalInfos, probeTerminal } from './acp/terminal-info';
 import { acceptStory, approveStory, reworkStory, resumeStory, startStory, storyDiff } from './service';
 import { summarizeDiff } from './ops';
 import { releaseStatus, releaseStory, rollbackStory } from './release';
@@ -200,6 +201,20 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.put('/api/settings', async (req) => updateGlobalSettings(req.body as Partial<GlobalSettings>));
 
+  app.get('/api/terminals', async () => listTerminalInfos());
+
+  app.post('/api/terminals/:kind/probe', async (req) => {
+    const { kind } = req.params as { kind: string };
+    const body = (req.body ?? {}) as { projectId?: string };
+    const cwd = body.projectId ? getProject(body.projectId).repoPath : undefined;
+    return probeTerminal(kind, cwd);
+  });
+
+  app.post('/api/terminals/:kind/update-check', async (req) => {
+    const { kind } = req.params as { kind: string };
+    return checkTerminalUpdate(kind);
+  });
+
   app.post('/api/projects', async (req) => {
     const body = req.body as {
       name: string;
@@ -210,6 +225,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       teamMode?: boolean;
       model?: string;
       discoveryModel?: string;
+      thinking?: string;
       glossary?: string;
       requireMachineDod?: boolean;
       autoApproveReads?: boolean;
@@ -284,6 +300,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       teamMode?: boolean;
       model?: string;
       discoveryModel?: string;
+      thinking?: string;
       glossary?: string;
       requireMachineDod?: boolean;
       autoApproveReads?: boolean;

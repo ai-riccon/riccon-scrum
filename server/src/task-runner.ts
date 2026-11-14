@@ -100,6 +100,7 @@ async function startTaskSession(storyId: string, role: 'solo' | 'dev'): Promise<
     role,
     undefined,
     project.model || undefined,
+    project.thinking || undefined,
   );
 }
 
@@ -258,6 +259,7 @@ async function runParallelTask(
       role,
       undefined,
       project.model || undefined,
+      project.thinking || undefined,
     );
     updateStoryTask(task.id, { sessionId: session.id });
     const baseline = sessionUsage(storyId, session.id);

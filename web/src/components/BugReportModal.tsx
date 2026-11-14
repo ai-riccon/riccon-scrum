@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { BugPriority, BugReproducibility, BugSeverity } from '@riccon-scrum/shared';
 import { api, type BoardStory } from '../api';
 import { Icon } from '../icons';
+import { confirmAction } from './ConfirmDialog';
 
 export function BugReportModal({
   story,
@@ -32,6 +33,13 @@ export function BugReportModal({
       onToast('error', '请填写标题、复现步骤、期望结果与实际结果');
       return;
     }
+    const ok = await confirmAction({
+      title: '提交 Bug 反馈',
+      message: 'Bug 将进入分诊队列，并按项目 SLA 计算截止时间。',
+      detail: `${story.title}\n${title.trim()} · ${severity}/${priority}`,
+      confirmText: '提交 Bug',
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await api.createBug(story.id, {
@@ -64,7 +72,7 @@ export function BugReportModal({
         <div className="modal-head">
           <h3>反馈 Bug</h3>
           <span className="badge">{story.title}</span>
-          <button className="btn icon ghost" onClick={onClose} aria-label="关闭">
+          <button className="btn icon ghost" onClick={onClose} aria-label="关闭" data-tip="关闭 Bug 反馈弹窗，已填写内容不会保存">
             <Icon name="x" size={14} />
           </button>
         </div>

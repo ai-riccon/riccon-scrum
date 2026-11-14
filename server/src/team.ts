@@ -55,6 +55,7 @@ async function runPhase(
     role,
     resumeSessionId,
     project.model || undefined,
+    project.thinking || undefined,
   );
   bus.publish(storyId, { type: 'team.phase', phase, role, sessionId: session.id });
   try {

@@ -1,6 +1,6 @@
 import type { GlobalSettings, Project } from '@riccon-scrum/shared';
 
-export type SettingsTab = 'runtime' | 'embedding' | 'tasks' | 'project' | 'delivery' | 'knowledge' | 'projects';
+export type SettingsTab = 'runtime' | 'embedding' | 'tasks' | 'terminal' | 'project' | 'delivery' | 'knowledge' | 'projects';
 
 export type SettingsToast = (kind: 'success' | 'error', text: string) => void;
 

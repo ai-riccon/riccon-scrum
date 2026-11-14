@@ -6,6 +6,7 @@ import { EmbeddingPane, RuntimePane, TasksPane } from './settings/SettingsGlobal
 import { KnowledgePane } from './settings/SettingsKnowledgePane';
 import { DeliveryPane, ProjectConfigPane } from './settings/SettingsProjectPanes';
 import { ProjectsPane } from './settings/SettingsProjectsPane';
+import { TerminalPane } from './settings/SettingsTerminalPane';
 import type { SettingsTab } from './settings/types';
 
 export type { SettingsTab } from './settings/types';
@@ -37,6 +38,18 @@ const NAV: {
         icon: 'list',
         title: '任务执行',
         desc: 'Story Task 规划、并行执行、上下文预算与 Bug SLA。',
+      },
+    ],
+  },
+  {
+    group: '终端',
+    items: [
+      {
+        id: 'terminal',
+        label: '终端管理',
+        icon: 'terminal',
+        title: '终端管理',
+        desc: '查看终端版本与更新、读取已配置模型，并设置当前项目默认模型与思考强度。',
       },
     ],
   },
@@ -167,10 +180,6 @@ export function SettingsPage({
               </div>
               <span className="spacer" />
               <span className="badge">{project.name}</span>
-              <button className="btn ghost" onClick={onClose}>
-                <Icon name="x" size={14} />
-                关闭
-              </button>
             </div>
           </header>
           <div className="settings-content">
@@ -192,6 +201,9 @@ export function SettingsPage({
               ) : (
                 <div className="settings-loading">加载中…</div>
               ))}
+            {tab === 'terminal' && (
+              <TerminalPane key={project.id} project={project} agentKinds={agentKinds} onToast={onToast} onChanged={onChanged} />
+            )}
             {tab === 'project' && (
               <ProjectConfigPane key={project.id} project={project} agentKinds={agentKinds} onToast={onToast} onChanged={onChanged} />
             )}

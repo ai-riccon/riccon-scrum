@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Tag } from '@riccon-scrum/shared';
 import { Icon } from '../icons';
+import { confirmAction } from './ConfirmDialog';
 
 export function TagFilter({
   tags,
@@ -49,6 +50,13 @@ export function TagEditor({
   const create = async () => {
     const name = newName.trim();
     if (!name || !onCreate || busy) return;
+    const ok = await confirmAction({
+      title: '新建标签',
+      message: '标签会保存到项目标签库，并立即应用到当前对象。',
+      detail: name,
+      confirmText: '创建标签',
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       const tag = await onCreate(name);
@@ -71,8 +79,19 @@ export function TagEditor({
           <button
             className="tag-remove"
             aria-label={`移除标签 ${tag.name}`}
+            data-tip={`从当前对象移除标签「${tag.name}」`}
             disabled={disabled}
-            onClick={() => onChange(selected.filter((item) => item.id !== tag.id))}
+            onClick={async () => {
+              const ok = await confirmAction({
+                title: '移除标签',
+                message: '该标签会从当前对象移除，标签本身仍保留在项目标签库。',
+                detail: tag.name,
+                confirmText: '移除',
+                tone: 'warning',
+              });
+              if (!ok) return;
+              onChange(selected.filter((item) => item.id !== tag.id));
+            }}
           >
             ×
           </button>
@@ -107,7 +126,7 @@ export function TagEditor({
             disabled={disabled || busy}
             aria-label="新建标签"
           />
-          <button className="btn small ghost" disabled={disabled || busy || !newName.trim()} onClick={() => void create()}>
+          <button className="btn small ghost" disabled={disabled || busy || !newName.trim()} onClick={() => void create()} aria-label="新建标签" data-tip="创建新标签并立即应用到当前对象">
             <Icon name="plus" size={11} />
           </button>
         </span>

@@ -4,6 +4,7 @@ import { api } from '../../api';
 import { Icon } from '../../icons';
 import type { ProjectPaneProps } from './types';
 import { Help } from './SettingsUi';
+import { confirmAction } from '../ConfirmDialog';
 
 function archivedTime(iso: string | null): string {
   if (!iso) return '';
@@ -52,11 +53,11 @@ function ProjectRow({
       <div className="project-admin-actions">
         {archived ? (
           <>
-            <button className="btn sm" disabled={busy} onClick={onRestore}>
+            <button className="btn sm" disabled={busy} onClick={onRestore} data-tip="恢复该项目，使其重新出现在工作台与项目切换器">
               <Icon name="refresh" size={12} className={busy ? 'spin' : ''} />
               恢复
             </button>
-            <button className="btn sm danger" disabled={busy} onClick={onDelete}>
+            <button className="btn sm danger" disabled={busy} onClick={onDelete} data-tip="永久删除项目平台数据；本地代码文件夹与 Git 不受影响">
               <Icon name="x" size={12} />
               删除
             </button>
@@ -67,6 +68,7 @@ function ProjectRow({
             disabled={busy || !canArchive}
             onClick={onArchive}
             title={canArchive ? '归档项目' : '至少保留一个未归档项目'}
+            data-tip={canArchive ? '归档项目：从工作台与切换器隐藏，可随时恢复' : '至少保留一个未归档项目，当前操作不可用'}
           >
             <Icon name={busy ? 'refresh' : 'archive'} size={12} className={busy ? 'spin' : ''} />
             归档
@@ -110,23 +112,38 @@ export function ProjectsPane({ project, onToast, onChanged }: ProjectPaneProps) 
     }
   };
 
-  const archive = (item: Project) => {
-    if (!window.confirm(`归档项目「${item.name}」？\n归档后会从项目切换器隐藏，可在「设置 → 项目归档」中恢复。`)) return;
+  const archive = async (item: Project) => {
+    const ok = await confirmAction({
+      title: '归档项目',
+      message: '归档后会从项目切换器隐藏，可在「设置 → 项目归档」中恢复。',
+      detail: item.name,
+      confirmText: '归档',
+      tone: 'warning',
+    });
+    if (!ok) return;
     void run(item.id, () => api.archiveProject(item.id), `项目「${item.name}」已归档`);
   };
 
-  const restore = (item: Project) => {
+  const restore = async (item: Project) => {
+    const ok = await confirmAction({
+      title: '恢复项目',
+      message: '恢复后项目会重新出现在工作台与项目切换器中。',
+      detail: item.name,
+      confirmText: '恢复',
+    });
+    if (!ok) return;
     void run(item.id, () => api.unarchiveProject(item.id), `项目「${item.name}」已恢复`);
   };
 
-  const remove = (item: Project) => {
-    if (
-      !window.confirm(
-        `永久删除项目「${item.name}」？\n将删除平台内的故事、需求、文档与配置数据，本地代码文件夹和 Git 分支不受影响。`,
-      )
-    ) {
-      return;
-    }
+  const remove = async (item: Project) => {
+    const ok = await confirmAction({
+      title: '永久删除项目',
+      message: '将删除平台内的故事、需求、文档与配置数据；本地代码文件夹和 Git 分支不受影响。此操作不可撤销。',
+      detail: item.name,
+      confirmText: '永久删除',
+      tone: 'danger',
+    });
+    if (!ok) return;
     void run(item.id, () => api.deleteProject(item.id), `项目「${item.name}」已删除`);
   };
 

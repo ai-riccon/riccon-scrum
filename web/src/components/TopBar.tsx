@@ -1,45 +1,35 @@
-import { useState } from 'react';
-import type { Project, Story } from '@riccon-scrum/shared';
+import type { Story } from '@riccon-scrum/shared';
 import { Icon } from '../icons';
 import { STATUS_META } from '../ui';
-import { GitBranchChip } from './GitBranch';
+
+export type AppView = 'overview' | 'board';
+export type NavKey = 'overview' | 'requirements' | 'board' | 'bugs' | 'docs' | 'settings';
 
 export function TopBar({
-  project,
-  projects,
   stories,
   connected,
-  onNewStory,
+  hasProject,
+  activeNav,
+  onViewChange,
   onSettings,
   onDocs,
   onSearch,
-  onMetrics,
   onRequirements,
   onBugs,
-  onSwitchProject,
   onRegister,
-  onManageProjects,
-  onChanged,
-  onToast,
 }: {
-  project?: Project;
-  projects: Project[];
   stories: Story[];
   connected: boolean;
-  onNewStory: () => void;
+  hasProject: boolean;
+  activeNav: NavKey;
+  onViewChange: (view: AppView) => void;
   onSettings: () => void;
   onDocs: () => void;
   onSearch: () => void;
-  onMetrics: () => void;
   onRequirements: () => void;
   onBugs: () => void;
-  onSwitchProject: (id: string) => void;
   onRegister: () => void;
-  onManageProjects: () => void;
-  onChanged: () => void | Promise<void>;
-  onToast: (kind: 'success' | 'error' | 'info', text: string) => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const active = stories.filter((s) => s.status === 'in_dev').length;
   const review = stories.filter((s) => s.status === 'review').length;
   const done = stories.filter((s) => s.status === 'done').length;
@@ -57,109 +47,95 @@ export function TopBar({
         </div>
       </div>
 
-      {project && (
-        <div className="project-switcher">
-          <button className="project-chip" onClick={() => setMenuOpen((v) => !v)} title={project.repoPath} aria-label="切换项目">
-            <Icon name="folder" size={13} style={{ color: 'var(--indigo-bright)' }} />
-            <span className="name">{project.name}</span>
-            <Icon name="arrowRight" size={12} style={{ transform: 'rotate(90deg)', color: 'var(--text-low)' }} />
+      {hasProject && (
+        <nav className="main-nav" aria-label="主导航">
+          <button
+            className={`nav-item ${activeNav === 'overview' ? 'on' : ''}`}
+            onClick={() => onViewChange('overview')}
+            aria-label="项目概览"
+          >
+            <Icon name="home" size={14} />
+            <span>概览</span>
           </button>
-          {menuOpen && (
-            <>
-              <div className="menu-scrim" onClick={() => setMenuOpen(false)} />
-              <div className="project-menu">
-                <div className="pm-head">切换项目</div>
-                {projects.map((p) => (
-                  <button
-                    key={p.id}
-                    className={`pm-item ${p.id === project.id ? 'active' : ''}`}
-                    onClick={() => {
-                      onSwitchProject(p.id);
-                      setMenuOpen(false);
-                    }}
-                  >
-                    <Icon name={p.id === project.id ? 'check' : 'folder'} size={13} />
-                    <span className="pm-name">{p.name}</span>
-                    <span className="pm-meta">{p.teamMode ? '团队' : 'Solo'} · {p.agentKind}</span>
-                  </button>
-                ))}
-                <button
-                  className="pm-item pm-manage"
-                  onClick={() => {
-                    onManageProjects();
-                    setMenuOpen(false);
-                  }}
-                >
-                  <Icon name="archive" size={13} />
-                  <span className="pm-name">项目归档</span>
-                </button>
-                <button
-                  className="pm-item pm-register"
-                  onClick={() => {
-                    onRegister();
-                    setMenuOpen(false);
-                  }}
-                >
-                  <Icon name="plus" size={13} />
-                  <span className="pm-name">新建项目</span>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+          <button
+            className={`nav-item ${activeNav === 'requirements' ? 'on' : ''}`}
+            onClick={onRequirements}
+            aria-label="需求工作台"
+          >
+            <Icon name="sparkles" size={14} />
+            <span>需求</span>
+          </button>
+          <button
+            className={`nav-item ${activeNav === 'board' ? 'on' : ''}`}
+            onClick={() => onViewChange('board')}
+            aria-label="故事看板"
+          >
+            <Icon name="list" size={14} />
+            <span>看板</span>
+          </button>
+          <button className={`nav-item ${activeNav === 'bugs' ? 'on' : ''}`} onClick={onBugs} aria-label="Bug 反馈">
+            <Icon name="alert" size={14} />
+            <span>Bug 反馈</span>
+          </button>
+          <button className={`nav-item ${activeNav === 'docs' ? 'on' : ''}`} onClick={onDocs} aria-label="项目文档">
+            <Icon name="file" size={14} />
+            <span>项目文档</span>
+          </button>
+          <button
+            className="nav-search"
+            onClick={onSearch}
+            aria-label="搜索"
+            data-tip="打开全局搜索（Ctrl+K）：检索需求、故事、符号与代码"
+          >
+            <Icon name="eye" size={14} />
+            <span className="nav-search-text">搜索需求、故事、代码</span>
+            <kbd>Ctrl K</kbd>
+          </button>
+        </nav>
       )}
 
-      {project && <GitBranchChip project={project} onChanged={onChanged} onToast={onToast} />}
+      {!hasProject ? (
+        <>
+          <span className="spacer" />
+          <button className="btn primary" onClick={onRegister}>
+            <Icon name="plus" size={14} />
+            新建项目
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="spacer" />
+          <div className="topbar-stats">
+            <span className="stat-pill">
+              <i className="stat-dot" style={{ background: 'var(--st-indev)', boxShadow: '0 0 8px var(--st-indev)' }} />
+              开发中 <b>{active}</b>
+            </span>
+            <span className="stat-pill">
+              <i className="stat-dot" style={{ background: 'var(--st-review)' }} />
+              待验收 <b>{review}</b>
+            </span>
+            <span className="stat-pill">
+              <i className="stat-dot" style={{ background: 'var(--st-done)' }} />
+              已完成 <b>{done}</b>
+            </span>
+          </div>
 
-      {!project && (
-        <button className="btn primary" onClick={onRegister}>
-          <Icon name="plus" size={14} />
-          新建项目
-        </button>
+          <div className={`conn ${connected ? '' : 'off'}`}>
+            <i className="dot" />
+            {connected ? '实时连接' : '重连中…'}
+          </div>
+
+          <button
+            className={`btn ghost settings-entry ${activeNav === 'settings' ? 'on' : ''}`}
+            onClick={onSettings}
+            aria-label="设置"
+            data-tip="打开设置：运行参数、终端管理、项目配置、交付门禁与项目归档"
+          >
+            <Icon name="layers" size={15} />
+            设置
+          </button>
+        </>
       )}
-
-      <div className="topbar-stats">
-        <span className="stat-pill">
-          <i className="stat-dot" style={{ background: 'var(--st-indev)', boxShadow: '0 0 8px var(--st-indev)' }} />
-          开发中 <b>{active}</b>
-        </span>
-        <span className="stat-pill">
-          <i className="stat-dot" style={{ background: 'var(--st-review)' }} />
-          待验收 <b>{review}</b>
-        </span>
-        <span className="stat-pill">
-          <i className="stat-dot" style={{ background: 'var(--st-done)' }} />
-          已完成 <b>{done}</b>
-        </span>
-      </div>
-
-      <div className={`conn ${connected ? '' : 'off'}`}>
-        <i className="dot" />
-        {connected ? '实时连接' : '重连中…'}
-      </div>
-
-      <button className="btn icon ghost" onClick={onRequirements} aria-label="需求工作台" title="需求工作台">
-        <Icon name="sparkles" size={16} />
-      </button>
-      <button className="btn icon ghost" onClick={onBugs} aria-label="Bug 反馈" title="Bug 反馈">
-        <Icon name="alert" size={16} />
-      </button>
-      <button className="btn icon ghost" onClick={onMetrics} aria-label="流动度量" title="流动度量">
-        <Icon name="activity" size={16} />
-      </button>
-      <button className="btn icon ghost" onClick={onSearch} aria-label="代码搜索" title="代码搜索 (Ctrl+K)">
-        <Icon name="eye" size={16} />
-      </button>
-      <button className="btn icon ghost" onClick={onDocs} aria-label="项目文档" title="项目文档">
-        <Icon name="file" size={16} />
-      </button>
-      <button className="btn icon ghost" onClick={onSettings} aria-label="设置" title="设置">
-        <Icon name="layers" size={16} />
-      </button>
-      <button className="btn primary" onClick={onNewStory}>
-        <Icon name="plus" size={15} />
-        新建故事
-      </button>
     </header>
   );
 }

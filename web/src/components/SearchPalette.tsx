@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CodeSearchResult, EntitySearchResult, Project } from '@riccon-scrum/shared';
 import { api } from '../api';
 import { Icon, type IconName } from '../icons';
+import { confirmAction } from './ConfirmDialog';
 
 const KIND_META: Record<CodeSearchResult['kind'], { icon: IconName; color: string; label: string }> = {
   symbol: { icon: 'code', color: 'var(--cyan)', label: '符号' },
@@ -14,11 +15,13 @@ export function SearchPalette({
   onClose,
   onOpenStory,
   onOpenRequirement,
+  onToast,
 }: {
   project: Project;
   onClose: () => void;
   onOpenStory?: (id: string) => void;
   onOpenRequirement?: (id: string) => void;
+  onToast?: (kind: 'success' | 'error' | 'info', text: string) => void;
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CodeSearchResult[]>([]);
@@ -63,11 +66,21 @@ export function SearchPalette({
   }, [query, runSearch]);
 
   const reindex = async () => {
+    const ok = await confirmAction({
+      title: '重建代码索引',
+      message: '将重新扫描项目文件并重建符号索引，大项目可能需要几十秒。',
+      detail: project.name,
+      confirmText: '重建索引',
+    });
+    if (!ok) return;
     setLoading(true);
     try {
       const s = await api.index(project.id);
       setStats({ files: s.files, symbols: s.symbols });
+      onToast?.('success', `索引已重建：${s.files} 个文件 · ${s.symbols} 个符号`);
       runSearch(query);
+    } catch (err) {
+      onToast?.('error', err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -97,7 +110,7 @@ export function SearchPalette({
             aria-label="代码搜索"
           />
           {loading && <Icon name="refresh" size={15} className="spin" style={{ color: 'var(--text-low)' }} />}
-          <button className="btn sm ghost" onClick={reindex} title="重建索引">
+          <button className="btn sm ghost" onClick={reindex} title="重建索引" data-tip="重建代码索引：重新扫描项目文件与符号">
             <Icon name="refresh" size={13} />
             索引
           </button>

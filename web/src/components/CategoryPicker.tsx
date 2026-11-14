@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Category } from '@riccon-scrum/shared';
 import { api } from '../api';
 import { Icon } from '../icons';
+import { confirmAction } from './ConfirmDialog';
 
 export function categoryOptions(categories: Category[]): { id: string; label: string }[] {
   return categories
@@ -94,6 +95,13 @@ export function CategoryManagerModal({
 
   const create = async () => {
     if (!name.trim()) return;
+    const ok = await confirmAction({
+      title: '创建分类',
+      message: '新分类会保存到项目分类树，并可用于故事与需求归类。',
+      detail: name.trim(),
+      confirmText: '创建分类',
+    });
+    if (!ok) return;
     setBusy('create');
     try {
       await api.createCategory({ projectId, name: name.trim(), parentId: parentId || null });
@@ -109,11 +117,19 @@ export function CategoryManagerModal({
 
   const rename = async (id: string) => {
     if (!editingName.trim()) return;
+    const ok = await confirmAction({
+      title: '重命名分类',
+      message: '分类名会立即更新到所有关联故事。',
+      detail: `新名称：${editingName.trim()}`,
+      confirmText: '确认重命名',
+    });
+    if (!ok) return;
     setBusy(id);
     try {
       await api.renameCategory(id, editingName.trim());
       setEditingId(null);
       await onChanged();
+      onToast('success', '分类已重命名');
     } catch (err) {
       onToast('error', err instanceof Error ? err.message : String(err));
     } finally {
@@ -122,6 +138,15 @@ export function CategoryManagerModal({
   };
 
   const remove = async (id: string) => {
+    const target = categories.find((item) => item.id === id);
+    const ok = await confirmAction({
+      title: '删除分类',
+      message: '删除后该分类下的故事会变为未分类，子分类会一并移除。',
+      detail: target?.path ?? id,
+      confirmText: '删除分类',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setBusy(id);
     try {
       await api.deleteCategory(id);
@@ -153,7 +178,7 @@ export function CategoryManagerModal({
                 </option>
               ))}
             </select>
-            <button className="btn small primary" disabled={busy === 'create' || !name.trim()} onClick={create}>
+            <button className="btn small primary" disabled={busy === 'create' || !name.trim()} onClick={create} data-tip="把新分类保存到项目分类树，可继续创建子分类">
               <Icon name="plus" size={12} />
               添加
             </button>
@@ -180,10 +205,11 @@ export function CategoryManagerModal({
                           setEditingId(option.id);
                           setEditingName(category.name);
                         }}
+                        data-tip="修改分类名称，所有关联故事与需求同步更新"
                       >
                         重命名
                       </button>
-                      <button className="btn small ghost" disabled={busy === option.id} onClick={() => remove(option.id)}>
+                      <button className="btn small ghost" disabled={busy === option.id} onClick={() => remove(option.id)} data-tip="删除该分类；其下故事会变为未分类，子分类一并移除">
                         删除
                       </button>
                     </>

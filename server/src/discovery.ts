@@ -654,6 +654,7 @@ export async function generateRequirementDraft(
       host: createReadOnlyHost(requirementId),
       allowedRoots: [worktree],
       model: discoveryModel || undefined,
+      thinking: project.thinking || undefined,
     });
     activeRunners.set(requirementId, runner);
     await raceTimeout(

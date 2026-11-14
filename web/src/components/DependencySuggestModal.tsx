@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { DependencyEntityType, DependencySuggestion } from '@riccon-scrum/shared';
 import { api } from '../api';
 import { Icon } from '../icons';
+import { confirmAction } from './ConfirmDialog';
 
 export function DependencySuggestModal({
   projectId,
@@ -47,6 +48,13 @@ export function DependencySuggestModal({
   const apply = async () => {
     const chosen = suggestions.filter((item) => selected.has(`${item.predecessorId}|${item.successorId}`));
     if (chosen.length === 0) return;
+    const ok = await confirmAction({
+      title: '应用依赖建议',
+      message: '将为选中项创建前置依赖关系，后续启动会受依赖限制。',
+      detail: chosen.map((item) => `${item.predecessorTitle} → ${item.successorTitle}`).join('\n'),
+      confirmText: `应用 ${chosen.length} 条`,
+    });
+    if (!ok) return;
     setApplying(true);
     let applied = 0;
     const failures: string[] = [];
@@ -79,7 +87,7 @@ export function DependencySuggestModal({
           <Icon name="sparkles" size={18} style={{ color: 'var(--cyan)', marginRight: 10 }} />
           <h3>AI 依赖建议</h3>
           <span className="badge">{entityTitle}</span>
-          <button className="btn icon ghost" onClick={onClose} aria-label="关闭" style={{ marginLeft: 'auto' }}>
+          <button className="btn icon ghost" onClick={onClose} aria-label="关闭" data-tip="关闭 AI 依赖建议，不应用任何更改" style={{ marginLeft: 'auto' }}>
             <Icon name="close" size={16} />
           </button>
         </div>
@@ -122,13 +130,13 @@ export function DependencySuggestModal({
           )}
         </div>
         <div className="modal-foot">
-          <button className="btn ghost" onClick={load} disabled={loading || applying}>
+          <button className="btn ghost" onClick={load} disabled={loading || applying} data-tip="重新分析并生成依赖建议，不会写入项目">
             <Icon name="refresh" size={12} />
             重新建议
           </button>
           <span style={{ flex: 1 }} />
           <button className="btn ghost" onClick={onClose} disabled={applying}>取消</button>
-          <button className="btn primary" disabled={loading || applying || selected.size === 0} onClick={apply}>
+          <button className="btn primary" disabled={loading || applying || selected.size === 0} onClick={apply} data-tip="为选中项创建前置依赖关系，后续启动会受此约束">
             <Icon name="check" size={14} />
             {applying ? '创建中…' : `创建 ${selected.size} 条依赖`}
           </button>

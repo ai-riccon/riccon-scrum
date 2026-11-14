@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Category, Tag, TaxonomyCategoryNode, TaxonomyProposal } from '@riccon-scrum/shared';
 import { api } from '../api';
 import { Icon } from '../icons';
+import { confirmAction } from './ConfirmDialog';
 
 function existingTree(categories: Category[]): TaxonomyCategoryNode[] {
   const nodes = new Map(categories.map((category) => [category.id, { name: category.name, children: [] as TaxonomyCategoryNode[] }]));
@@ -75,6 +76,13 @@ export function TaxonomyModal({
 
   const apply = async () => {
     if (!proposal) return;
+    const ok = await confirmAction({
+      title: '应用分类与标签建议',
+      message: '将创建缺失的分类/标签并分配到对应 Story 与需求。',
+      detail: `新增分类 ${proposal.categories.length} 个 · 标签 ${proposal.tags.length} 个 · 归类 ${proposal.assignments.length} 项`,
+      confirmText: '应用建议',
+    });
+    if (!ok) return;
     setApplying(true);
     try {
       const result = await api.taxonomyApply(projectId, proposal);
@@ -98,7 +106,7 @@ export function TaxonomyModal({
           <Icon name="sparkles" size={18} style={{ color: 'var(--cyan)', marginRight: 10 }} />
           <h3>分类与标签</h3>
           <span className="badge">{proposal ? 'AI 新提议' : '当前词表'}</span>
-          <button className="btn icon ghost" onClick={onClose} aria-label="关闭" style={{ marginLeft: 'auto' }}>
+          <button className="btn icon ghost" onClick={onClose} aria-label="关闭" data-tip="关闭分类与标签建议，不应用任何更改" style={{ marginLeft: 'auto' }}>
             <Icon name="close" size={16} />
           </button>
         </div>
@@ -156,13 +164,13 @@ export function TaxonomyModal({
           )}
         </div>
         <div className="modal-foot">
-          <button className="btn ghost" onClick={generate} disabled={loading || applying}>
+          <button className="btn ghost" onClick={generate} disabled={loading || applying} data-tip="重新让 AI 生成分类与标签建议，不会写入项目">
             <Icon name={proposal ? 'refresh' : 'sparkles'} size={12} />
             {proposal ? '重新生成' : 'AI 重新生成'}
           </button>
           <span className="spacer" style={{ flex: 1 }} />
           <button className="btn ghost" onClick={onClose} disabled={applying}>关闭</button>
-          <button className="btn primary" disabled={loading || applying || !proposal} onClick={apply}>
+          <button className="btn primary" disabled={loading || applying || !proposal} onClick={apply} data-tip="把选中的分类与标签建议写入项目，并归类相关对象">
             <Icon name="check" size={14} />
             {applying ? '应用中…' : '确认并应用'}
           </button>

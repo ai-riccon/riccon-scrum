@@ -13,6 +13,7 @@ import type {
 import { api, type RequirementLive } from '../api';
 import { Icon } from '../icons';
 import { CategoryFilter, CategoryManagerModal, CategorySelect } from './CategoryPicker';
+import { confirmAction } from './ConfirmDialog';
 import { DependencyGraphModal } from './DependencyGraphModal';
 import { DependencyPeekModal, type DependencyPeekTarget } from './DependencyPeekModal';
 import { DependencySuggestModal } from './DependencySuggestModal';
@@ -338,6 +339,13 @@ export function RequirementsPage({
       onToast('error', '请填写需求标题与原始需求');
       return;
     }
+    const ok = await confirmAction({
+      title: '创建需求',
+      message: '需求创建后可以生成 AI 草稿并进入评审流程。',
+      detail: `${project.name}\n${title.trim()}`,
+      confirmText: '创建需求',
+    });
+    if (!ok) return;
     setBusy('create');
     try {
       const hasIntake = Object.values(intake).some((value) => value.trim());
@@ -366,6 +374,13 @@ export function RequirementsPage({
       onToast('error', '请用一句话描述需求');
       return;
     }
+    const ok = await confirmAction({
+      title: '开始需求澄清',
+      message: '将创建需求并启动 AI 澄清会话，最多追问 3 轮。',
+      detail: newMessage.trim(),
+      confirmText: '开始澄清',
+    });
+    if (!ok) return;
     setBusy('intake-start');
     try {
       const requirement = await api.startIntake({ projectId: project.id, message: newMessage.trim() });
@@ -388,6 +403,7 @@ export function RequirementsPage({
       await api.intakeMessage(detail.requirement.id, intakeMsg.trim());
       setIntakeMsg('');
       await onChanged();
+      onToast('success', '已发送，等待 AI 继续澄清');
     } catch (err) {
       onToast('error', err instanceof Error ? err.message : String(err));
     } finally {
@@ -397,6 +413,13 @@ export function RequirementsPage({
 
   const confirmChat = async () => {
     if (!detail) return;
+    const ok = await confirmAction({
+      title: '确认需求澄清结果',
+      message: '确认后 AI 将生成用户故事，并在校验通过后自动物化。',
+      detail: detail.requirement.title,
+      confirmText: '确认并生成',
+    });
+    if (!ok) return;
     setBusy('intake-confirm');
     try {
       await api.confirmIntake(detail.requirement.id);
@@ -412,6 +435,13 @@ export function RequirementsPage({
 
   const generate = async () => {
     if (!detail) return;
+    const ok = await confirmAction({
+      title: '生成需求草稿',
+      message: 'AI 将根据需求描述生成用户故事草稿，完成后需要人工评审。',
+      detail: detail.requirement.title,
+      confirmText: '开始生成',
+    });
+    if (!ok) return;
     setBusy('generate');
     try {
       await api.generateRequirement(detail.requirement.id);
@@ -426,6 +456,14 @@ export function RequirementsPage({
 
   const cancelGeneration = async () => {
     if (!detail) return;
+    const ok = await confirmAction({
+      title: '取消需求生成',
+      message: '将请求停止当前生成任务，已生成的内容会保留。',
+      detail: detail.requirement.title,
+      confirmText: '取消生成',
+      tone: 'warning',
+    });
+    if (!ok) return;
     setBusy('cancel');
     try {
       await api.cancelRequirement(detail.requirement.id);
@@ -444,6 +482,13 @@ export function RequirementsPage({
       onToast('error', '请填写反馈标题与描述');
       return;
     }
+    const ok = await confirmAction({
+      title: '生产反馈转需求',
+      message: '将创建一条新需求，并保留生产反馈来源。',
+      detail: feedbackTitle.trim(),
+      confirmText: '创建需求',
+    });
+    if (!ok) return;
     setBusy('feedback-create');
     try {
       const requirement = await api.createFeedback({
@@ -473,6 +518,13 @@ export function RequirementsPage({
       onToast('error', '请填写整体意见，或对具体故事批/驳');
       return;
     }
+    const ok = await confirmAction({
+      title: '提交需求评审反馈',
+      message: '提交后 AI 将按反馈修订故事草稿，需要重新评审。',
+      detail: `${detail.requirement.title}\n整体意见：${comment.trim() || '（无）'}\n逐条决定：${rows.length} 条`,
+      confirmText: '提交反馈',
+    });
+    if (!ok) return;
     setBusy('feedback');
     try {
       await api.requirementFeedback(detail.requirement.id, { comment: comment.trim(), decisions: rows });
@@ -493,6 +545,13 @@ export function RequirementsPage({
       onToast('error', '存在校验错误或 DoR 未通过项，不能批准');
       return;
     }
+    const ok = await confirmAction({
+      title: '批准需求并生成故事',
+      message: '批准后会生成用户故事草稿并直接进入 Ready 列。',
+      detail: detail.requirement.title,
+      confirmText: '批准并生成',
+    });
+    if (!ok) return;
     setBusy('approve');
     try {
       const result = await api.approveRequirement(detail.requirement.id);
@@ -533,6 +592,14 @@ export function RequirementsPage({
 
   const addRequirementDependency = async () => {
     if (!detail || !depCandidate) return;
+    const target = requirements.find((item) => item.id === depCandidate);
+    const ok = await confirmAction({
+      title: '添加前置需求',
+      message: '该需求必须等前置需求完成后才能进入交付。',
+      detail: `前置：${target?.title ?? depCandidate}\n当前：${detail.requirement.title}`,
+      confirmText: '添加依赖',
+    });
+    if (!ok) return;
     setDepBusy('add');
     try {
       await api.createDependency({
@@ -553,6 +620,14 @@ export function RequirementsPage({
   };
 
   const removeRequirementDependency = async (id: string) => {
+    const ok = await confirmAction({
+      title: '移除前置需求',
+      message: '移除后当前需求不再受该前置需求阻塞。',
+      detail: requirements.find((item) => item.id === id)?.title ?? id,
+      confirmText: '移除依赖',
+      tone: 'warning',
+    });
+    if (!ok) return;
     setDepBusy(id);
     try {
       await api.deleteDependency(id);
@@ -601,6 +676,7 @@ export function RequirementsPage({
       await api.setRequirementTags(detail.requirement.id, next.map((tag) => tag.id));
       await onChanged();
       setDetail(await api.requirement(detail.requirement.id));
+      onToast('success', '需求标签已更新');
     } catch (err) {
       onToast('error', err instanceof Error ? err.message : String(err));
     } finally {
@@ -621,6 +697,14 @@ export function RequirementsPage({
 
   const archive = async () => {
     if (!detail) return;
+    const ok = await confirmAction({
+      title: '归档需求',
+      message: '归档后需求不再出现在默认列表，可在需要时恢复。',
+      detail: detail.requirement.title,
+      confirmText: '归档需求',
+      tone: 'warning',
+    });
+    if (!ok) return;
     setBusy('archive');
     try {
       await api.archiveRequirement(detail.requirement.id);
@@ -672,29 +756,26 @@ export function RequirementsPage({
               setNewMode('chat');
               setNewOpen(true);
             }}
+            data-tip="创建需求：可先对话澄清，也可直接填写原始需求"
           >
             <Icon name="plus" size={14} />
             新建需求
           </button>
-          <button className="btn ghost" onClick={() => setGraphOpen(true)}>
+          <button className="btn ghost" onClick={() => setGraphOpen(true)} data-tip="查看需求之间的 Finish-to-Start 依赖图与关键路径">
             <Icon name="layers" size={14} />
             依赖图
           </button>
-          <button className="btn ghost" onClick={() => setCategoryManagerOpen(true)}>
+          <button className="btn ghost" onClick={() => setCategoryManagerOpen(true)} data-tip="管理三级分类树，用于需求和故事归类">
             <Icon name="layers" size={14} />
             分类
           </button>
-          <button className="btn ghost" onClick={() => setTaxonomyOpen(true)}>
+          <button className="btn ghost" onClick={() => setTaxonomyOpen(true)} data-tip="让 AI 生成分类与标签建议，确认后批量应用">
             <Icon name="sparkles" size={14} />
             AI 分类/标签
           </button>
-          <button className="btn ghost" onClick={() => setFeedbackOpen(true)}>
+          <button className="btn ghost" onClick={() => setFeedbackOpen(true)} data-tip="把生产环境问题转为新需求，并保留反馈来源">
             <Icon name="inbox" size={14} />
             生产反馈
-          </button>
-          <button className="btn ghost" onClick={onClose}>
-            <Icon name="x" size={14} />
-            返回
           </button>
         </div>
 
@@ -789,6 +870,7 @@ export function RequirementsPage({
                     className="btn small"
                     disabled={!!busy || generating || !!conversation?.running || ['approved', 'decomposed', 'split', 'archived'].includes(requirement.status)}
                     onClick={generate}
+                    data-tip={requirement.currentVersion ? '按当前需求描述重新生成故事草稿' : '按需求描述生成第一版故事草稿'}
                   >
                     <Icon name="refresh" size={12} />
                     {requirement.currentVersion ? '重新生成' : '生成草稿'}
@@ -796,29 +878,29 @@ export function RequirementsPage({
                   {['in_review', 'clarifying'].includes(requirement.status) &&
                     requirement.currentVersion > 0 &&
                     (depthById.get(requirement.id) ?? 1) < 3 && (
-                    <button className="btn small ghost" disabled={!!busy || generating} onClick={loadSplitDraft}>
+                    <button className="btn small ghost" disabled={!!busy || generating} onClick={loadSplitDraft} data-tip="生成可勾选的子需求草案，确认后才创建">
                       <Icon name="layers" size={12} />
                       {busy === 'split' ? 'AI 生成草案中…' : 'AI 拆分为子需求'}
                     </button>
                   )}
                   {generating && (
-                    <button className="btn small ghost" disabled={busy === 'cancel'} onClick={cancelGeneration}>
+                    <button className="btn small ghost" disabled={busy === 'cancel'} onClick={cancelGeneration} data-tip="停止当前需求生成任务，已生成内容会保留">
                       <Icon name="x" size={12} />
                       {busy === 'cancel' ? '取消中…' : '取消生成'}
                     </button>
                   )}
                   {['approved', 'decomposed'].includes(requirement.status) && (
-                    <button className="btn small ghost" onClick={() => setChangeOpen((v) => !v)}>
+                    <button className="btn small ghost" onClick={() => setChangeOpen((v) => !v)} data-tip="创建需求变更单并分析受影响故事与文档">
                       <Icon name="refresh" size={12} />
                       发起变更
                     </button>
                   )}
-                  <button className="btn small ghost" onClick={() => setScopeOpen(true)}>
+                  <button className="btn small ghost" onClick={() => setScopeOpen(true)} data-tip="查看该需求的范围用例图">
                     <Icon name="user" size={12} />
                     用例图
                   </button>
                   {requirement.status !== 'archived' && requirement.status !== 'decomposed' && (
-                    <button className="btn small ghost" disabled={!!busy} onClick={archive}>
+                    <button className="btn small ghost" disabled={!!busy} onClick={archive} data-tip="归档需求，默认列表不再显示，可恢复">
                       <Icon name="inbox" size={12} />
                       归档
                     </button>
@@ -862,6 +944,7 @@ export function RequirementsPage({
                           className="btn small"
                           disabled={conversation.running || !!busy || !intakeMsg.trim()}
                           onClick={sendIntake}
+                          data-tip="把补充信息发送给 AI，继续澄清需求"
                         >
                           <Icon name="arrowRight" size={12} />
                           {busy === 'intake-send' ? '发送中…' : '发送回答'}
@@ -870,6 +953,7 @@ export function RequirementsPage({
                           className={`btn small ${conversation.ready ? 'primary' : 'ghost'}`}
                           disabled={conversation.running || !!busy || conversation.messages.length === 0}
                           onClick={confirmChat}
+                          data-tip="结束澄清并生成故事；信息未收敛时可能停留在评审页"
                         >
                           <Icon name="check" size={12} />
                           {busy === 'intake-confirm'
@@ -974,6 +1058,7 @@ export function RequirementsPage({
                           <button
                             className="dep-remove"
                             aria-label="移除前置需求"
+                            data-tip={`移除前置需求：${item?.title ?? dep.predecessorId}`}
                             disabled={depBusy === dep.id}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1030,11 +1115,11 @@ export function RequirementsPage({
                         </option>
                       ))}
                     </select>
-                    <button className="btn small" disabled={!depCandidate || depBusy === 'add'} onClick={addRequirementDependency}>
+                    <button className="btn small" disabled={!depCandidate || depBusy === 'add'} onClick={addRequirementDependency} data-tip="把选中的需求设为当前需求的前置依赖">
                       <Icon name="plus" size={12} />
                       添加
                     </button>
-                    <button className="btn small ghost" disabled={depBusy !== null} onClick={() => setSuggestOpen(true)}>
+                    <button className="btn small ghost" disabled={depBusy !== null} onClick={() => setSuggestOpen(true)} data-tip="让 AI 推荐可添加的需求依赖，确认后才创建">
                       <Icon name="sparkles" size={12} />
                       AI 建议依赖
                     </button>
@@ -1271,11 +1356,11 @@ export function RequirementsPage({
                           placeholder="整体修改意见：AI 会按此修订；未驳回的故事应尽量保持不变。"
                         />
                         <div className="req-actions">
-                          <button className="btn" disabled={!!busy || feedbackLocked} onClick={submitFeedback}>
+                          <button className="btn" disabled={!!busy || feedbackLocked} onClick={submitFeedback} data-tip="按评审意见让 AI 修订故事草稿">
                             <Icon name="refresh" size={13} />
                             {busy === 'feedback' ? '提交中…' : '提交反馈并修订'}
                           </button>
-                          <button className="btn primary" disabled={!!busy || errorCount > 0 || dorBlocked} onClick={approve}>
+                          <button className="btn primary" disabled={!!busy || errorCount > 0 || dorBlocked} onClick={approve} data-tip="校验通过后批准需求，并生成 Ready 状态的用户故事">
                             <Icon name="check" size={13} />
                             {busy === 'approve' ? '生成中…' : '批准并生成故事'}
                           </button>

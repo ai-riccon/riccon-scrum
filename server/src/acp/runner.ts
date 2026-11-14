@@ -6,6 +6,7 @@ import * as acp from '@agentclientprotocol/sdk';
 import type { EventPayload } from '@riccon-scrum/shared';
 import { TerminalManager } from './terminal';
 import type { AgentSpec } from './agents';
+import { flattenSelectOptions, modelConfigOption, thoughtConfigOption } from './config-options';
 
 export interface RunnerHost {
   publish(storyId: string, payload: EventPayload): void;
@@ -24,6 +25,7 @@ export interface RunnerOptions {
   host: RunnerHost;
   allowedRoots: string[];
   model?: string;
+  thinking?: string;
 }
 
 function textOf(content: acp.ContentBlock): string {
@@ -227,29 +229,80 @@ export class AcpRunner {
     if (resumeSessionId) {
       this.acpSessionId = resumeSessionId;
       this.loading = true;
-      await ctx.request(acp.methods.agent.session.load, { sessionId: resumeSessionId, cwd, mcpServers: [] });
+      const loaded = await ctx.request(acp.methods.agent.session.load, { sessionId: resumeSessionId, cwd, mcpServers: [] });
       this.loading = false;
+      await this.applySessionConfig(loaded.configOptions);
     } else {
       const resp = await ctx.request(acp.methods.agent.session.new, { cwd, mcpServers: [] });
       this.acpSessionId = resp.sessionId;
-    }
-    if (spec.modelConfigId && this.opts.model) {
-      try {
-        await ctx.request(acp.methods.agent.session.setConfigOption, {
-          sessionId: this.acpSessionId,
-          configId: spec.modelConfigId,
-          value: this.opts.model,
-        });
-      } catch (err) {
-        host.publish(storyId, {
-          type: 'agent.message',
-          sessionId,
-          role: 'thought',
-          text: `[平台] 模型钉住失败（${this.opts.model}）：${err instanceof Error ? err.message : String(err)}`,
-        });
-      }
+      await this.applySessionConfig(resp.configOptions);
     }
     host.publish(storyId, { type: 'session.status', sessionId, status: 'running' });
+  }
+
+  private note(text: string): void {
+    this.opts.host.publish(this.opts.storyId, {
+      type: 'agent.message',
+      sessionId: this.opts.sessionId,
+      role: 'thought',
+      text: `[平台] ${text}`,
+    });
+  }
+
+  private async applySessionConfig(configOptions: acp.SessionConfigOption[] | null | undefined): Promise<void> {
+    if (!this.ctx || !this.acpSessionId) return;
+    const { model, thinking, spec } = this.opts;
+    const picks: { configId: string; value: string; label: string }[] = [];
+
+    const modelOption = modelConfigOption(configOptions);
+    if (model) {
+      if (modelOption?.type === 'select') {
+        const match = flattenSelectOptions(modelOption.options).find(
+          (choice) => choice.value === model || choice.value.toLowerCase() === model.toLowerCase(),
+        );
+        if (match) {
+          picks.push({ configId: modelOption.id, value: match.value, label: `模型 ${match.value}` });
+        } else if (spec.modelConfigId) {
+          // Terminal-specific escape hatch (e.g. qoder-cli's `model` option).
+          picks.push({ configId: spec.modelConfigId, value: model, label: `模型 ${model}` });
+        }
+        // opencode receives its model through OPENCODE_MODEL, so no note is needed when absent.
+      } else if (spec.modelConfigId) {
+        picks.push({ configId: spec.modelConfigId, value: model, label: `模型 ${model}` });
+      }
+    }
+
+    const thoughtOption = thoughtConfigOption(configOptions);
+    if (thinking) {
+      if (thoughtOption?.type === 'select') {
+        const wanted = thinking.toLowerCase();
+        const match = flattenSelectOptions(thoughtOption.options).find(
+          (choice) => choice.value.toLowerCase() === wanted || choice.name.toLowerCase() === wanted,
+        );
+        if (match) {
+          picks.push({ configId: thoughtOption.id, value: match.value, label: `思考强度 ${match.value}` });
+        } else {
+          const available = flattenSelectOptions(thoughtOption.options)
+            .map((choice) => choice.value)
+            .join(' / ');
+          this.note(`终端未提供思考强度「${thinking}」，当前可选：${available || '（无）'}`);
+        }
+      } else {
+        this.note('当前终端未暴露 thought_level 配置项，思考强度使用终端默认值');
+      }
+    }
+
+    for (const pick of picks) {
+      try {
+        await this.ctx.request(acp.methods.agent.session.setConfigOption, {
+          sessionId: this.acpSessionId,
+          configId: pick.configId,
+          value: pick.value,
+        });
+      } catch (err) {
+        this.note(`${pick.label} 设置失败：${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
   }
 
   async prompt(text: string): Promise<acp.StopReason> {

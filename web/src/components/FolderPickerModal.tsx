@@ -50,6 +50,7 @@ export function FolderPickerModal({
               onClick={() => listing?.parent && void load(listing.parent)}
               title="上一级"
               aria-label="上一级"
+              data-tip="返回父文件夹"
             >
               <Icon name="arrowRight" size={14} style={{ transform: 'rotate(180deg)' }} />
             </button>
@@ -65,7 +66,7 @@ export function FolderPickerModal({
             <button className="btn small" disabled={loading || !draft.trim()} onClick={() => void load(draft)}>
               前往
             </button>
-            <button className="btn icon ghost" disabled={loading} onClick={() => void load(listing?.path)} title="刷新" aria-label="刷新">
+            <button className="btn icon ghost" disabled={loading} onClick={() => void load(listing?.path)} title="刷新" aria-label="刷新" data-tip="重新读取当前文件夹内容">
               <Icon name="refresh" size={14} className={loading ? 'spin' : ''} />
             </button>
           </div>
