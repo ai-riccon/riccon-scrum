@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
@@ -7,15 +7,51 @@ import net from 'node:net';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const DATA = path.join(ROOT, 'server', 'data');
 const PID_FILE = path.join(DATA, 'dev.pid');
+const LOG_FILE = path.join(DATA, 'dev.log');
 const API_PORT = Number(process.env.PORT ?? 8787);
 const WEB_PORT = 5399;
 const WEB_URL = `http://127.0.0.1:${WEB_PORT}`;
 const isWin = process.platform === 'win32';
+const REQUIRED_DEPS = ['concurrently', 'tsx', 'vite'];
 
 fs.mkdirSync(DATA, { recursive: true });
 
 function log(msg) {
   console.log(`[riccon-scrum] ${msg}`);
+}
+
+function readLogTail(lines = 30) {
+  try {
+    const content = fs.readFileSync(LOG_FILE, 'utf8').replace(/\x1b\[[0-9;]*m/g, '');
+    const rows = content.split(/\r?\n/).filter((line) => line.trim() !== '');
+    return rows.slice(-lines);
+  } catch {
+    return [];
+  }
+}
+
+function depsInstalled() {
+  return REQUIRED_DEPS.every((name) => fs.existsSync(path.join(ROOT, 'node_modules', name)));
+}
+
+function ensureDeps() {
+  if (depsInstalled()) return true;
+  log('未检测到完整依赖（node_modules），正在执行 npm install …');
+  const res = spawnSync('npm install --no-audit --no-fund', {
+    cwd: ROOT,
+    stdio: 'inherit',
+    shell: true,
+  });
+  if (res.status !== 0) {
+    log('依赖安装失败：请检查网络或 npm registry 配置后重试。');
+    return false;
+  }
+  if (!depsInstalled()) {
+    log('依赖仍不完整：请删除 node_modules 目录后重新运行 start.cmd。');
+    return false;
+  }
+  log('依赖安装完成。');
+  return true;
 }
 
 async function healthOk() {
@@ -98,6 +134,18 @@ function listeningPids(port) {
   }
 }
 
+function reportFailure(reason) {
+  log(reason);
+  log(`完整日志：${LOG_FILE}`);
+  const tail = readLogTail(20);
+  if (tail.length) {
+    log('—— 日志末尾 ——');
+    for (const line of tail) console.log(`  ${line}`);
+  } else {
+    log('日志为空：dev server 可能未能启动。');
+  }
+}
+
 async function start() {
   if (await healthOk()) {
     log(`已在运行：${WEB_URL}`);
@@ -108,26 +156,38 @@ async function start() {
     log(`启动失败：端口 ${API_PORT} 或 ${WEB_PORT} 被其他程序占用，请先释放端口。`);
     return 1;
   }
-  if (isWin) {
-    const child = spawn('cmd.exe', ['/c', 'start', '', 'cmd', '/k', 'npm run dev'], {
-      cwd: ROOT,
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: false,
-    });
-    child.unref();
-    log('正在独立控制台窗口中启动 dev server（日志见该窗口）…');
-  } else {
-    const child = spawn('npm', ['run', 'dev'], { cwd: ROOT, detached: true, stdio: 'ignore' });
-    child.unref();
-    fs.writeFileSync(PID_FILE, String(child.pid));
-    log('正在后台启动 dev server…');
+  if (!ensureDeps()) return 1;
+
+  try {
+    fs.writeFileSync(
+      LOG_FILE,
+      `[riccon-scrum] dev server 启动于 ${new Date().toISOString()}\n[root] ${ROOT}\n\n`,
+    );
+  } catch {
+    // log file is best-effort
   }
+
+  const child = spawn(process.execPath, [path.join(ROOT, 'scripts', 'dev-run.mjs')], {
+    cwd: ROOT,
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  child.on('error', (err) => log(`启动子进程失败：${err.message}`));
+  child.unref();
+  try {
+    fs.writeFileSync(PID_FILE, String(child.pid));
+  } catch {
+    // pid file is best-effort
+  }
+  log(`正在后台启动 dev server（日志：${LOG_FILE}）…`);
+
   if (!(await waitHealth(90000))) {
-    log('启动超时：请查看控制台窗口中的报错。');
+    reportFailure('启动超时：dev server 未在 90 秒内就绪。');
     return 1;
   }
   log(`已启动：${WEB_URL}  |  API http://127.0.0.1:${API_PORT}`);
+  log(`日志：${LOG_FILE}（查看：node scripts/dev-control.mjs logs）`);
   openBrowser(WEB_URL);
   return 0;
 }
@@ -182,6 +242,7 @@ async function status() {
   const running = await healthOk();
   log(`状态：${running ? '运行中' : '未运行'}`);
   log(`  Web ${WEB_URL}  |  API http://127.0.0.1:${API_PORT}`);
+  log(`  日志：${LOG_FILE}`);
   if (isWin) {
     const pids = [...listeningPids(API_PORT), ...listeningPids(WEB_PORT)];
     if (pids.length) log(`  监听进程 PID：${[...new Set(pids)].join(', ')}`);
@@ -193,9 +254,36 @@ async function status() {
       // no pid file
     }
   }
+  if (!running) {
+    const tail = readLogTail(5);
+    if (tail.length) {
+      log('  最近日志：');
+      for (const line of tail) console.log(`    ${line}`);
+    }
+  }
+  return 0;
+}
+
+function logs() {
+  const arg = process.argv[3];
+  const lines = Number(arg) > 0 ? Number(arg) : 60;
+  const tail = readLogTail(lines);
+  if (!tail.length) {
+    log(`日志为空或不存在：${LOG_FILE}`);
+    return 0;
+  }
+  log(`日志末尾 ${tail.length} 行（${LOG_FILE}）：`);
+  for (const line of tail) console.log(line);
   return 0;
 }
 
 const action = process.argv[2] ?? 'status';
-const code = action === 'start' ? await start() : action === 'stop' ? await stop() : await status();
+const code =
+  action === 'start'
+    ? await start()
+    : action === 'stop'
+      ? await stop()
+      : action === 'logs'
+        ? logs()
+        : await status();
 process.exit(code);
